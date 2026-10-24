@@ -41,7 +41,7 @@ export const OwnerLogin: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#FAF9F6] text-[#18181B] font-sans flex items-center justify-center p-4 selection:bg-[#DBEAFE] selection:text-[#1E3A8A]">
+    <div className="min-h-screen bg-[#FAF9F6] text-[#18181B] font-sans flex items-center justify-center p-4 selection:bg-[#B8F130] selection:text-[#111111]">
       <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
@@ -49,7 +49,7 @@ export const OwnerLogin: React.FC = () => {
         className="max-w-md w-full bg-white border border-[#E5E4DF] rounded-2xl p-8 shadow-sm space-y-6 relative overflow-hidden"
       >
         <div className="text-center space-y-2">
-          <div className="w-14 h-14 mx-auto rounded-xl bg-[#EEF2FF] border border-[#C7D2FE] text-[#1D4ED8] flex items-center justify-center">
+          <div className="w-14 h-14 mx-auto rounded-xl bg-[#F4FBE1] border border-[#BEF264] text-[#3F6212] flex items-center justify-center">
             <ShieldCheck size={28} />
           </div>
           <p className="text-xs font-medium text-[#64748B]">
@@ -82,7 +82,7 @@ export const OwnerLogin: React.FC = () => {
                 placeholder="admin@formandfit.in"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full bg-[#FAF9F6] border border-[#D6D5CE] rounded-lg px-3 py-2.5 pl-9 text-sm text-[#18181B] focus:bg-white focus:border-[#1D4ED8] focus:ring-2 focus:ring-[#1D4ED8]/15 focus:outline-none transition-colors"
+                className="w-full bg-[#FAF9F6] border border-[#D6D5CE] rounded-lg px-3 py-2.5 pl-9 text-sm text-[#18181B] focus:bg-white focus:border-[#65A30D] focus:ring-2 focus:ring-[#65A30D]/15 focus:outline-none transition-colors"
               />
               <Mail size={16} className="absolute left-3 top-3 text-[#64748B]" />
             </div>
@@ -99,7 +99,7 @@ export const OwnerLogin: React.FC = () => {
                 placeholder="Enter admin passcode"
                 value={passcode}
                 onChange={(e) => setPasscode(e.target.value)}
-                className="w-full bg-[#FAF9F6] border border-[#D6D5CE] rounded-lg px-3 py-2.5 pl-9 pr-10 text-sm text-[#18181B] focus:bg-white focus:border-[#1D4ED8] focus:ring-2 focus:ring-[#1D4ED8]/15 focus:outline-none transition-colors"
+                className="w-full bg-[#FAF9F6] border border-[#D6D5CE] rounded-lg px-3 py-2.5 pl-9 pr-10 text-sm text-[#18181B] focus:bg-white focus:border-[#65A30D] focus:ring-2 focus:ring-[#65A30D]/15 focus:outline-none transition-colors"
               />
               <KeyRound size={16} className="absolute left-3 top-3 text-[#64748B]" />
               <button
@@ -116,7 +116,7 @@ export const OwnerLogin: React.FC = () => {
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-3 bg-[#1D4ED8] hover:bg-[#1E40AF] text-white rounded-lg font-space font-semibold text-sm transition-colors flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 whitespace-nowrap"
+            className="w-full py-3 bg-[#B8F130] hover:bg-[#AAE422] text-[#111111] rounded-lg font-space font-bold text-sm transition-colors flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 whitespace-nowrap"
           >
             {loading ? (
               <span>Signing In...</span>
@@ -131,7 +131,7 @@ export const OwnerLogin: React.FC = () => {
         <div className="pt-4 border-t border-[#E5E4DF] text-center">
           <Link
             to="/"
-            className="text-xs font-medium text-[#52525B] hover:text-[#1D4ED8] transition-colors inline-block"
+            className="text-xs font-medium text-[#52525B] hover:text-[#4D7C0F] transition-colors inline-block"
           >
             ← Return to Customer Storefront
           </Link>

@@ -15,7 +15,7 @@ export const SupabaseBanner: React.FC = () => {
         className={`text-xs py-1.5 px-4 flex items-center justify-between border-b transition-colors ${
           configured
             ? 'bg-[#F0FDF4] text-[#166534] border-[#DCFCE7]'
-            : 'bg-[#F8FAFC] text-[#475569] border-[#E2E8F0]'
+            : 'bg-[#FAF9F6] text-[#52525B] border-[#E5E4DF]'
         }`}
       >
         <div className="flex items-center gap-2 max-w-7xl mx-auto w-full">
@@ -28,14 +28,14 @@ export const SupabaseBanner: React.FC = () => {
               </span>
             ) : (
               <span className="flex items-center gap-1.5">
-                <AlertCircle size={13} className="text-[#1D4ED8]" />
+                <AlertCircle size={13} className="text-[#4D7C0F]" />
                 Browser-Database Mode Active · Connect Supabase for Cloud PostgreSQL &amp; Storage
               </span>
             )}
           </span>
           <button
             onClick={() => setShowModal(true)}
-            className="underline underline-offset-2 ml-2 hover:text-[#1D4ED8] font-semibold cursor-pointer shrink-0 whitespace-nowrap"
+            className="underline underline-offset-2 ml-2 hover:text-[#4D7C0F] font-semibold cursor-pointer shrink-0 whitespace-nowrap"
           >
             {configured ? 'Database Info' : 'Setup Supabase'}
           </button>
@@ -62,7 +62,7 @@ export const SupabaseBanner: React.FC = () => {
             </button>
 
             <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 rounded-lg bg-[#EEF2FF] text-[#1D4ED8] flex items-center justify-center">
+              <div className="w-10 h-10 rounded-lg bg-[#F4FBE1] border border-[#BEF264] text-[#3F6212] flex items-center justify-center">
                 <Database size={22} />
               </div>
               <div>
@@ -81,7 +81,7 @@ export const SupabaseBanner: React.FC = () => {
                   <span className="font-semibold text-xs text-[#64748B]">Current Mode</span>
                   <span
                     className={`text-xs font-semibold ${
-                      configured ? 'text-[#15803D]' : 'text-[#1D4ED8]'
+                      configured ? 'text-[#15803D]' : 'text-[#4D7C0F]'
                     }`}
                   >
                     {configured ? 'Live Connected' : 'Local Testing Mode'}
@@ -109,7 +109,7 @@ export const SupabaseBanner: React.FC = () => {
                     Set your environment variables in <code className="bg-[#F3F2EE] border border-[#E5E4DF] px-1.5 py-0.5 rounded font-mono text-[#18181B]">.env</code>:
                   </li>
                 </ol>
-                <div className="mt-2.5 bg-[#F8FAFC] border border-[#E2E8F0] text-[#1E293B] p-3 rounded-md font-mono text-xs overflow-x-auto">
+                <div className="mt-2.5 bg-[#FAF9F6] border border-[#E5E4DF] text-[#18181B] p-3 rounded-md font-mono text-xs overflow-x-auto">
                   VITE_SUPABASE_URL="https://your-project.supabase.co"
                   <br />
                   VITE_SUPABASE_ANON_KEY="your-anon-public-key"
@@ -119,7 +119,7 @@ export const SupabaseBanner: React.FC = () => {
               <div className="pt-2 flex justify-end gap-3">
                 <button
                   onClick={() => setShowModal(false)}
-                  className="px-4 py-2 bg-[#1D4ED8] text-white font-space font-semibold text-xs rounded-md hover:bg-[#1E40AF] transition-colors cursor-pointer"
+                  className="px-4 py-2 bg-[#B8F130] text-[#111111] font-space font-bold text-xs rounded-md hover:bg-[#AAE422] transition-colors cursor-pointer"
                 >
                   Close &amp; Continue
                 </button>

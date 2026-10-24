@@ -41,7 +41,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
   const statusTag = isOutOfStock
     ? { label: 'Sold Out', classes: 'bg-white/95 text-red-700 border-[#FECACA]' }
     : isOnSale
-    ? { label: 'Sale', classes: 'bg-[#EEF2FF]/95 text-[#1D4ED8] border-[#C7D2FE]' }
+    ? { label: 'Sale', classes: 'bg-[#B8F130]/95 text-[#111111] border-[#9ED912] font-semibold' }
     : product.featured
     ? { label: 'Featured', classes: 'bg-white/95 text-[#18181B] border-[#E5E4DF]' }
     : null;
@@ -94,13 +94,13 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
               e.preventDefault();
               toggleWishlist(product);
             }}
-            className="absolute top-2.5 right-2.5 p-2 bg-white/90 hover:bg-white text-[#3F3F46] hover:text-[#1D4ED8] backdrop-blur-xs transition-colors rounded-full z-10 cursor-pointer border border-[#E5E4DF] shadow-2xs"
+            className="absolute top-2.5 right-2.5 p-2 bg-white/90 hover:bg-white text-[#3F3F46] hover:text-[#4D7C0F] backdrop-blur-xs transition-colors rounded-full z-10 cursor-pointer border border-[#E5E4DF] shadow-2xs"
             aria-label="Save to Wishlist"
           >
             <Heart
               size={15}
-              fill={inWishlist ? '#1D4ED8' : 'none'}
-              className={inWishlist ? 'text-[#1D4ED8]' : ''}
+              fill={inWishlist ? '#B8F130' : 'none'}
+              className={inWishlist ? 'text-[#3F6212]' : ''}
             />
           </button>
 
@@ -121,7 +121,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
 
           <Link
             to={`/product/${product.slug}`}
-            className="font-space font-semibold text-base text-[#18181B] group-hover:text-[#1D4ED8] transition-colors line-clamp-1 block"
+            className="font-space font-semibold text-base text-[#18181B] group-hover:text-[#4D7C0F] transition-colors line-clamp-1 block"
           >
             {product.name}
           </Link>
@@ -136,7 +136,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
           <div className="pt-2 flex items-baseline gap-2 tabular-nums">
             {product.sale_price ? (
               <>
-                <span className="font-space font-bold text-[15px] text-[#1D4ED8]">
+                <span className="font-space font-bold text-[15px] text-[#4D7C0F]">
                   ₹{product.sale_price.toLocaleString('en-IN')}
                 </span>
                 <span className="font-sans text-xs text-[#94A3B8] line-through">

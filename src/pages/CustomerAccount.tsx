@@ -101,7 +101,7 @@ export const CustomerAccount: React.FC = () => {
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-8 font-sans text-[#18181B]">
         <div className="flex justify-between items-center border-b border-[#E5E4DF] pb-4">
           <div>
-            <span className="text-xs font-space font-semibold uppercase tracking-wider text-[#1D4ED8]">
+            <span className="text-xs font-space font-semibold uppercase tracking-wider text-[#4D7C0F]">
               Order Confirmation &amp; Tracking
             </span>
             <h1 className="font-space font-bold text-2xl text-[#18181B] mt-0.5">
@@ -110,7 +110,7 @@ export const CustomerAccount: React.FC = () => {
           </div>
           <Link
             to="/account"
-            className="text-xs font-space font-semibold text-[#1D4ED8] hover:underline flex items-center gap-1"
+            className="text-xs font-space font-semibold text-[#4D7C0F] hover:underline flex items-center gap-1"
           >
             ← Back to Orders
           </Link>
@@ -121,7 +121,7 @@ export const CustomerAccount: React.FC = () => {
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
             <div>
               <span className="text-xs font-medium text-[#64748B]">Fulfillment Status</span>
-              <h2 className="font-space font-bold text-xl capitalize text-[#1D4ED8]">
+              <h2 className="font-space font-bold text-xl capitalize text-[#3F6212]">
                 {singleOrder.status}
               </h2>
             </div>
@@ -141,12 +141,12 @@ export const CustomerAccount: React.FC = () => {
                 <div key={step} className="space-y-1.5">
                   <div
                     className={`h-2 rounded-full transition-colors ${
-                      isCompleted ? 'bg-[#1D4ED8]' : 'bg-[#E5E4DF]'
+                      isCompleted ? 'bg-[#84CC16]' : 'bg-[#E5E4DF]'
                     }`}
                   />
                   <span
                     className={
-                      isCompleted ? 'text-[#1D4ED8] font-semibold' : 'text-[#94A3B8]'
+                      isCompleted ? 'text-[#3F6212] font-semibold' : 'text-[#94A3B8]'
                     }
                   >
                     {step}
@@ -157,7 +157,7 @@ export const CustomerAccount: React.FC = () => {
           </div>
 
           {singleOrder.tracking_number && (
-            <div className="p-3.5 bg-[#EEF2FF] border border-[#C7D2FE] rounded-lg text-xs font-mono flex items-center justify-between text-[#1E3A8A]">
+            <div className="p-3.5 bg-[#F4FBE1] border border-[#BEF264] rounded-lg text-xs font-mono flex items-center justify-between text-[#3F6212]">
               <span>
                 Courier Tracking ID: <strong>{singleOrder.tracking_number}</strong>
               </span>
@@ -170,7 +170,7 @@ export const CustomerAccount: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="bg-white border border-[#E5E4DF] rounded-xl p-5 space-y-3">
             <h3 className="font-space font-bold text-xs uppercase tracking-wider border-b border-[#E5E4DF] pb-2 flex items-center gap-2 text-[#18181B]">
-              <MapPin size={14} className="text-[#1D4ED8]" /> Shipping Destination
+              <MapPin size={14} className="text-[#4D7C0F]" /> Shipping Destination
             </h3>
             <div className="text-xs text-[#52525B] space-y-1">
               <p className="font-semibold text-[#18181B]">
@@ -215,7 +215,7 @@ export const CustomerAccount: React.FC = () => {
               </div>
               <div className="flex justify-between pt-2 border-t border-[#E5E4DF] text-sm font-bold text-[#18181B]">
                 <span>Total Amount</span>
-                <span className="text-[#1D4ED8]">
+                <span className="text-[#111111]">
                   ₹{singleOrder.total_amount.toLocaleString('en-IN')}
                 </span>
               </div>
@@ -260,7 +260,7 @@ export const CustomerAccount: React.FC = () => {
       {/* Header */}
       <div className="border-b border-[#E5E4DF] pb-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <span className="text-xs font-space font-semibold uppercase tracking-wider text-[#1D4ED8]">
+          <span className="text-xs font-space font-semibold uppercase tracking-wider text-[#4D7C0F]">
             Form &amp; Fit Member Portal
           </span>
           <h1 className="font-space font-bold text-3xl tracking-tight text-[#18181B] mt-0.5">
@@ -271,7 +271,7 @@ export const CustomerAccount: React.FC = () => {
         {isOwner && (
           <Link
             to="/owner/dashboard"
-            className="px-4 py-2 bg-[#1D4ED8] text-white font-space text-xs font-semibold rounded-md flex items-center gap-2 hover:bg-[#1E40AF] transition-colors"
+            className="px-4 py-2 bg-[#B8F130] text-[#111111] font-space text-xs font-bold rounded-md flex items-center gap-2 hover:bg-[#AAE422] transition-colors"
           >
             <ShieldCheck size={16} /> Owner Admin Panel
           </Link>
@@ -283,7 +283,7 @@ export const CustomerAccount: React.FC = () => {
         <div className="md:col-span-3 bg-white border border-[#E5E4DF] rounded-xl p-5 space-y-4">
           <div className="border-b border-[#E5E4DF] pb-3">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-[#EEF2FF] text-[#1D4ED8] flex items-center justify-center font-space font-bold text-sm uppercase shrink-0">
+              <div className="w-10 h-10 rounded-full bg-[#B8F130] text-[#111111] flex items-center justify-center font-space font-bold text-sm uppercase shrink-0">
                 {(user.full_name || user.email).charAt(0)}
               </div>
               <div className="truncate">
@@ -300,7 +300,7 @@ export const CustomerAccount: React.FC = () => {
               onClick={() => setActiveTab('orders')}
               className={`w-full text-left py-2.5 px-3 rounded-lg flex items-center justify-between transition-colors cursor-pointer ${
                 activeTab === 'orders'
-                  ? 'bg-[#EEF2FF] text-[#1D4ED8] font-semibold'
+                  ? 'bg-[#F4FBE1] text-[#3F6212] border border-[#BEF264] font-semibold'
                   : 'text-[#52525B] hover:bg-[#F3F2EE]'
               }`}
             >
@@ -314,7 +314,7 @@ export const CustomerAccount: React.FC = () => {
               onClick={() => setActiveTab('profile')}
               className={`w-full text-left py-2.5 px-3 rounded-lg flex items-center justify-between transition-colors cursor-pointer ${
                 activeTab === 'profile'
-                  ? 'bg-[#EEF2FF] text-[#1D4ED8] font-semibold'
+                  ? 'bg-[#F4FBE1] text-[#3F6212] border border-[#BEF264] font-semibold'
                   : 'text-[#52525B] hover:bg-[#F3F2EE]'
               }`}
             >
@@ -328,7 +328,7 @@ export const CustomerAccount: React.FC = () => {
               onClick={() => setActiveTab('addresses')}
               className={`w-full text-left py-2.5 px-3 rounded-lg flex items-center justify-between transition-colors cursor-pointer ${
                 activeTab === 'addresses'
-                  ? 'bg-[#EEF2FF] text-[#1D4ED8] font-semibold'
+                  ? 'bg-[#F4FBE1] text-[#3F6212] border border-[#BEF264] font-semibold'
                   : 'text-[#52525B] hover:bg-[#F3F2EE]'
               }`}
             >
@@ -342,7 +342,7 @@ export const CustomerAccount: React.FC = () => {
               onClick={() => setActiveTab('wishlist')}
               className={`w-full text-left py-2.5 px-3 rounded-lg flex items-center justify-between transition-colors cursor-pointer ${
                 activeTab === 'wishlist'
-                  ? 'bg-[#EEF2FF] text-[#1D4ED8] font-semibold'
+                  ? 'bg-[#F4FBE1] text-[#3F6212] border border-[#BEF264] font-semibold'
                   : 'text-[#52525B] hover:bg-[#F3F2EE]'
               }`}
             >
@@ -395,7 +395,7 @@ export const CustomerAccount: React.FC = () => {
                     </p>
                     <Link
                       to="/shop"
-                      className="inline-block px-6 py-2.5 bg-[#1D4ED8] text-white font-space text-xs font-semibold rounded-md hover:bg-[#1E40AF] transition-colors"
+                      className="inline-block px-6 py-2.5 bg-[#B8F130] text-[#111111] font-space text-xs font-bold rounded-md hover:bg-[#AAE422] transition-colors"
                     >
                       Shop Catalog
                     </Link>
@@ -412,7 +412,7 @@ export const CustomerAccount: React.FC = () => {
                             <span className="font-space font-bold text-sm text-[#18181B]">
                               Order #{ord.order_number}
                             </span>
-                            <span className="text-xs font-semibold capitalize text-[#1D4ED8]">
+                            <span className="text-xs font-semibold capitalize text-[#4D7C0F]">
                               · {ord.status}
                             </span>
                           </div>
@@ -428,7 +428,7 @@ export const CustomerAccount: React.FC = () => {
                           </span>
                           <Link
                             to={`/account/orders/${ord.order_number}`}
-                            className="px-4 py-2 bg-[#FAF9F6] border border-[#D6D5CE] text-[#18181B] font-space text-xs font-semibold rounded-md hover:border-[#1D4ED8] hover:text-[#1D4ED8] transition-colors flex items-center gap-1"
+                            className="px-4 py-2 bg-[#FAF9F6] border border-[#D6D5CE] text-[#18181B] font-space text-xs font-semibold rounded-md hover:border-[#65A30D] hover:bg-[#F4FBE1] hover:text-[#111111] transition-colors flex items-center gap-1"
                           >
                             View Details <ArrowRight size={13} />
                           </Link>
@@ -469,7 +469,7 @@ export const CustomerAccount: React.FC = () => {
                       required
                       value={fullName}
                       onChange={(e) => setFullName(e.target.value)}
-                      className="w-full bg-[#FAF9F6] border border-[#D6D5CE] rounded-md p-2.5 focus:outline-none focus:border-[#1D4ED8]"
+                      className="w-full bg-[#FAF9F6] border border-[#D6D5CE] rounded-md p-2.5 focus:outline-none focus:border-[#65A30D]"
                     />
                   </div>
 
@@ -492,13 +492,13 @@ export const CustomerAccount: React.FC = () => {
                       type="tel"
                       value={phone}
                       onChange={(e) => setPhone(e.target.value)}
-                      className="w-full bg-[#FAF9F6] border border-[#D6D5CE] rounded-md p-2.5 focus:outline-none focus:border-[#1D4ED8] font-mono"
+                      className="w-full bg-[#FAF9F6] border border-[#D6D5CE] rounded-md p-2.5 focus:outline-none focus:border-[#65A30D] font-mono"
                     />
                   </div>
 
                   <button
                     type="submit"
-                    className="px-6 py-2.5 bg-[#1D4ED8] text-white font-space font-semibold text-xs rounded-md hover:bg-[#1E40AF] transition-colors flex items-center gap-2 cursor-pointer"
+                    className="px-6 py-2.5 bg-[#B8F130] text-[#111111] font-space font-bold text-xs rounded-md hover:bg-[#AAE422] transition-colors flex items-center gap-2 cursor-pointer"
                   >
                     <Save size={15} /> Save Profile Changes
                   </button>
@@ -521,7 +521,7 @@ export const CustomerAccount: React.FC = () => {
                   </h3>
                   <button
                     onClick={() => setShowAddressForm(!showAddressForm)}
-                    className="px-3.5 py-1.5 bg-[#1D4ED8] text-white font-space text-xs font-semibold rounded-md flex items-center gap-1 hover:bg-[#1E40AF] cursor-pointer"
+                    className="px-3.5 py-1.5 bg-[#B8F130] text-[#111111] font-space text-xs font-bold rounded-md flex items-center gap-1 hover:bg-[#AAE422] cursor-pointer"
                   >
                     <Plus size={14} /> Add Address
                   </button>
@@ -609,7 +609,7 @@ export const CustomerAccount: React.FC = () => {
                       </button>
                       <button
                         type="submit"
-                        className="px-4 py-2 bg-[#1D4ED8] text-white rounded-md font-space text-xs font-semibold cursor-pointer"
+                        className="px-4 py-2 bg-[#B8F130] text-[#111111] rounded-md font-space text-xs font-bold hover:bg-[#AAE422] transition-colors cursor-pointer"
                       >
                         Save Address
                       </button>
@@ -628,7 +628,7 @@ export const CustomerAccount: React.FC = () => {
                           {addr.full_name}
                         </span>
                         {idx === 0 && (
-                          <span className="text-[#1D4ED8] font-medium text-[11px]">
+                          <span className="text-[#4D7C0F] font-semibold text-[11px]">
                             Default
                           </span>
                         )}
@@ -672,7 +672,7 @@ export const CustomerAccount: React.FC = () => {
                     </p>
                     <Link
                       to="/shop"
-                      className="inline-block px-6 py-2.5 bg-[#1D4ED8] text-white font-space text-xs font-semibold rounded-md hover:bg-[#1E40AF] transition-colors"
+                      className="inline-block px-6 py-2.5 bg-[#B8F130] text-[#111111] font-space text-xs font-bold rounded-md hover:bg-[#AAE422] transition-colors"
                     >
                       Explore Catalog
                     </Link>
@@ -686,7 +686,7 @@ export const CustomerAccount: React.FC = () => {
                       >
                         <Link
                           to={`/product/${item.product.slug}`}
-                          className="block font-space font-semibold text-sm text-[#18181B] truncate hover:text-[#1D4ED8]"
+                          className="block font-space font-semibold text-sm text-[#18181B] truncate hover:text-[#4D7C0F]"
                         >
                           {item.product.name}
                         </Link>
@@ -698,7 +698,7 @@ export const CustomerAccount: React.FC = () => {
                         </p>
                         <Link
                           to={`/product/${item.product.slug}`}
-                          className="block text-center py-2 bg-[#1D4ED8] text-white font-space text-xs font-semibold rounded-md hover:bg-[#1E40AF] transition-colors"
+                          className="block text-center py-2 bg-[#B8F130] text-[#111111] font-space text-xs font-bold rounded-md hover:bg-[#AAE422] transition-colors"
                         >
                           View Product
                         </Link>

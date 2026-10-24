@@ -51,7 +51,7 @@ export const OwnerOrders: React.FC = () => {
               placeholder="Search order number, customer email, or name..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-[#FAF9F6] border border-[#D6D5CE] rounded-lg px-3 py-2 pl-9 text-xs text-[#18181B] focus:bg-white focus:border-[#1D4ED8] focus:ring-2 focus:ring-[#1D4ED8]/15 focus:outline-none transition-colors"
+              className="w-full bg-[#FAF9F6] border border-[#D6D5CE] rounded-lg px-3 py-2 pl-9 text-xs text-[#18181B] focus:bg-white focus:border-[#65A30D] focus:ring-2 focus:ring-[#65A30D]/15 focus:outline-none transition-colors"
             />
             <Search size={14} className="absolute left-3 top-2.5 text-[#64748B]" />
           </div>
@@ -59,7 +59,7 @@ export const OwnerOrders: React.FC = () => {
           <select
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value)}
-            className="w-full sm:w-auto bg-[#FAF9F6] border border-[#D6D5CE] rounded-lg px-3 py-2 text-xs font-medium text-[#18181B] focus:bg-white focus:border-[#1D4ED8] focus:outline-none cursor-pointer"
+            className="w-full sm:w-auto bg-[#FAF9F6] border border-[#D6D5CE] rounded-lg px-3 py-2 text-xs font-medium text-[#18181B] focus:bg-white focus:border-[#65A30D] focus:outline-none cursor-pointer"
           >
             <option value="">All Fulfillment Statuses</option>
             <option value="pending">Pending</option>
@@ -145,7 +145,7 @@ export const OwnerOrders: React.FC = () => {
                       <select
                         value={ord.status}
                         onChange={(e) => updateOrderStatus(ord.id, e.target.value as OrderStatus)}
-                        className="bg-white border border-[#D6D5CE] rounded-lg px-3 py-1.5 text-xs font-semibold text-[#18181B] focus:border-[#1D4ED8] focus:outline-none cursor-pointer"
+                        className="bg-white border border-[#D6D5CE] rounded-lg px-3 py-1.5 text-xs font-semibold text-[#18181B] focus:border-[#65A30D] focus:outline-none cursor-pointer"
                       >
                         <option value="pending">Pending</option>
                         <option value="processing">Processing</option>
@@ -161,7 +161,7 @@ export const OwnerOrders: React.FC = () => {
                           ord.payment_status === 'paid'
                             ? 'bg-[#F0FDF4] border-[#BBF7D0] text-[#166534]'
                             : ord.payment_status === 'refunded'
-                            ? 'bg-[#F8FAFC] border-[#CBD5E1] text-[#475569]'
+                            ? 'bg-[#FAF9F6] border-[#D6D5CE] text-[#52525B]'
                             : 'bg-[#FFFBEB] border-[#FDE68A] text-[#92400E]'
                         }`}
                       >
@@ -180,12 +180,12 @@ export const OwnerOrders: React.FC = () => {
                         onChange={(e) =>
                           setTrackingInputs((prev) => ({ ...prev, [ord.id]: e.target.value }))
                         }
-                        className="bg-[#FAF9F6] border border-[#D6D5CE] rounded-lg px-3 py-1.5 text-xs font-mono text-[#18181B] focus:bg-white focus:border-[#1D4ED8] focus:outline-none flex-1 sm:w-44"
+                        className="bg-[#FAF9F6] border border-[#D6D5CE] rounded-lg px-3 py-1.5 text-xs font-mono text-[#18181B] focus:bg-white focus:border-[#65A30D] focus:outline-none flex-1 sm:w-44"
                       />
                       <button
                         type="button"
                         onClick={() => handleTrackingUpdate(ord.id, ord.status, ord.tracking_number)}
-                        className="px-3.5 py-1.5 bg-[#1D4ED8] hover:bg-[#1E40AF] text-white rounded-lg font-space text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap shrink-0"
+                        className="px-3.5 py-1.5 bg-[#B8F130] hover:bg-[#AAE422] text-[#111111] rounded-lg font-space text-xs font-bold transition-colors cursor-pointer whitespace-nowrap shrink-0"
                       >
                         {savedOrderId === ord.id ? 'Saved' : 'Save Courier Info'}
                       </button>

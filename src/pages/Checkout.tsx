@@ -33,7 +33,7 @@ export const Checkout: React.FC = () => {
         </p>
         <Link
           to="/shop"
-          className="inline-block px-6 py-2.5 bg-[#1D4ED8] text-white font-space font-semibold text-xs rounded-md hover:bg-[#1E40AF] transition-colors"
+          className="inline-block px-6 py-2.5 bg-[#B8F130] text-[#111111] font-space font-bold text-xs rounded-md hover:bg-[#AAE422] transition-colors"
         >
           Return to Shop
         </Link>
@@ -108,7 +108,7 @@ export const Checkout: React.FC = () => {
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-8 text-[#18181B]">
       <div className="border-b border-[#E5E4DF] pb-4">
-        <span className="text-xs font-space font-semibold uppercase tracking-wider text-[#1D4ED8]">
+        <span className="text-xs font-space font-semibold uppercase tracking-wider text-[#4D7C0F]">
           Form &amp; Fit Checkout
         </span>
         <h1 className="font-space font-bold text-3xl tracking-tight text-[#18181B] mt-0.5">
@@ -145,7 +145,7 @@ export const Checkout: React.FC = () => {
                   placeholder="name@domain.com"
                   value={customerEmail}
                   onChange={(e) => setCustomerEmail(e.target.value)}
-                  className="w-full bg-[#FAF9F6] border border-[#D6D5CE] text-[#18181B] rounded-md p-2.5 text-xs focus:outline-none focus:border-[#1D4ED8] focus:bg-white transition-colors"
+                  className="w-full bg-[#FAF9F6] border border-[#D6D5CE] text-[#18181B] rounded-md p-2.5 text-xs focus:outline-none focus:border-[#65A30D] focus:bg-white transition-colors"
                 />
               </div>
 
@@ -159,7 +159,7 @@ export const Checkout: React.FC = () => {
                   placeholder="+91 98765 43210"
                   value={customerPhone}
                   onChange={(e) => setCustomerPhone(e.target.value)}
-                  className="w-full bg-[#FAF9F6] border border-[#D6D5CE] text-[#18181B] rounded-md p-2.5 text-xs focus:outline-none focus:border-[#1D4ED8] focus:bg-white transition-colors"
+                  className="w-full bg-[#FAF9F6] border border-[#D6D5CE] text-[#18181B] rounded-md p-2.5 text-xs focus:outline-none focus:border-[#65A30D] focus:bg-white transition-colors"
                 />
               </div>
             </div>
@@ -168,7 +168,7 @@ export const Checkout: React.FC = () => {
           {/* Section 2: Shipping Address */}
           <div className="bg-white border border-[#E5E4DF] rounded-xl p-6 space-y-4">
             <h3 className="font-space font-bold text-sm flex items-center gap-2 border-b border-[#E5E4DF] pb-3 text-[#18181B]">
-              <Truck size={16} className="text-[#1D4ED8]" /> 02. Shipping Address Across India
+              <Truck size={16} className="text-[#4D7C0F]" /> 02. Shipping Address Across India
             </h3>
 
             <div className="space-y-4">
@@ -182,7 +182,7 @@ export const Checkout: React.FC = () => {
                   placeholder="e.g. Rahul Sharma"
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
-                  className="w-full bg-[#FAF9F6] border border-[#D6D5CE] text-[#18181B] rounded-md p-2.5 text-xs focus:outline-none focus:border-[#1D4ED8] focus:bg-white transition-colors"
+                  className="w-full bg-[#FAF9F6] border border-[#D6D5CE] text-[#18181B] rounded-md p-2.5 text-xs focus:outline-none focus:border-[#65A30D] focus:bg-white transition-colors"
                 />
               </div>
 
@@ -196,7 +196,7 @@ export const Checkout: React.FC = () => {
                   placeholder="Flat 402, Sunshine Heights"
                   value={line1}
                   onChange={(e) => setLine1(e.target.value)}
-                  className="w-full bg-[#FAF9F6] border border-[#D6D5CE] text-[#18181B] rounded-md p-2.5 text-xs focus:outline-none focus:border-[#1D4ED8] focus:bg-white transition-colors"
+                  className="w-full bg-[#FAF9F6] border border-[#D6D5CE] text-[#18181B] rounded-md p-2.5 text-xs focus:outline-none focus:border-[#65A30D] focus:bg-white transition-colors"
                 />
               </div>
 
@@ -209,7 +209,7 @@ export const Checkout: React.FC = () => {
                   placeholder="Near Metro Station"
                   value={line2}
                   onChange={(e) => setLine2(e.target.value)}
-                  className="w-full bg-[#FAF9F6] border border-[#D6D5CE] text-[#18181B] rounded-md p-2.5 text-xs focus:outline-none focus:border-[#1D4ED8] focus:bg-white transition-colors"
+                  className="w-full bg-[#FAF9F6] border border-[#D6D5CE] text-[#18181B] rounded-md p-2.5 text-xs focus:outline-none focus:border-[#65A30D] focus:bg-white transition-colors"
                 />
               </div>
 
@@ -222,7 +222,7 @@ export const Checkout: React.FC = () => {
                     placeholder="Mumbai / Delhi"
                     value={city}
                     onChange={(e) => setCity(e.target.value)}
-                    className="w-full bg-[#FAF9F6] border border-[#D6D5CE] text-[#18181B] rounded-md p-2.5 text-xs focus:outline-none focus:border-[#1D4ED8] focus:bg-white transition-colors"
+                    className="w-full bg-[#FAF9F6] border border-[#D6D5CE] text-[#18181B] rounded-md p-2.5 text-xs focus:outline-none focus:border-[#65A30D] focus:bg-white transition-colors"
                   />
                 </div>
 
@@ -234,7 +234,7 @@ export const Checkout: React.FC = () => {
                     placeholder="Maharashtra"
                     value={state}
                     onChange={(e) => setState(e.target.value)}
-                    className="w-full bg-[#FAF9F6] border border-[#D6D5CE] text-[#18181B] rounded-md p-2.5 text-xs focus:outline-none focus:border-[#1D4ED8] focus:bg-white transition-colors"
+                    className="w-full bg-[#FAF9F6] border border-[#D6D5CE] text-[#18181B] rounded-md p-2.5 text-xs focus:outline-none focus:border-[#65A30D] focus:bg-white transition-colors"
                   />
                 </div>
 
@@ -246,7 +246,7 @@ export const Checkout: React.FC = () => {
                     placeholder="400001"
                     value={postalCode}
                     onChange={(e) => setPostalCode(e.target.value)}
-                    className="w-full bg-[#FAF9F6] border border-[#D6D5CE] text-[#18181B] rounded-md p-2.5 text-xs focus:outline-none focus:border-[#1D4ED8] focus:bg-white font-mono transition-colors"
+                    className="w-full bg-[#FAF9F6] border border-[#D6D5CE] text-[#18181B] rounded-md p-2.5 text-xs focus:outline-none focus:border-[#65A30D] focus:bg-white font-mono transition-colors"
                   />
                 </div>
               </div>
@@ -256,14 +256,14 @@ export const Checkout: React.FC = () => {
           {/* Section 3: Payment Method Selection */}
           <div className="bg-white border border-[#E5E4DF] rounded-xl p-6 space-y-4">
             <h3 className="font-space font-bold text-sm flex items-center gap-2 border-b border-[#E5E4DF] pb-3 text-[#18181B]">
-              <CreditCard size={16} className="text-[#1D4ED8]" /> 03. Payment Method
+              <CreditCard size={16} className="text-[#4D7C0F]" /> 03. Payment Method
             </h3>
 
             <div className="space-y-3">
               <label
                 className={`flex items-center justify-between p-3.5 border rounded-lg cursor-pointer transition-colors ${
                   paymentMethod === 'upi'
-                    ? 'border-[#1D4ED8] bg-[#EEF2FF]/60'
+                    ? 'border-[#84CC16] bg-[#F4FBE1]/70'
                     : 'border-[#E5E4DF] hover:border-[#CBD5E1] bg-[#FAF9F6]'
                 }`}
               >
@@ -274,7 +274,7 @@ export const Checkout: React.FC = () => {
                     value="upi"
                     checked={paymentMethod === 'upi'}
                     onChange={() => setPaymentMethod('upi')}
-                    className="accent-[#1D4ED8]"
+                    className="accent-[#65A30D]"
                   />
                   <div>
                     <span className="font-space font-semibold text-xs block text-[#18181B]">
@@ -283,13 +283,13 @@ export const Checkout: React.FC = () => {
                     <span className="text-[11px] text-[#64748B]">Instant payment verification</span>
                   </div>
                 </div>
-                <span className="text-[11px] font-semibold text-[#1D4ED8]">Instant</span>
+                <span className="text-[11px] font-semibold text-[#3F6212]">Instant</span>
               </label>
 
               <label
                 className={`flex items-center justify-between p-3.5 border rounded-lg cursor-pointer transition-colors ${
                   paymentMethod === 'razorpay'
-                    ? 'border-[#1D4ED8] bg-[#EEF2FF]/60'
+                    ? 'border-[#84CC16] bg-[#F4FBE1]/70'
                     : 'border-[#E5E4DF] hover:border-[#CBD5E1] bg-[#FAF9F6]'
                 }`}
               >
@@ -300,7 +300,7 @@ export const Checkout: React.FC = () => {
                     value="razorpay"
                     checked={paymentMethod === 'razorpay'}
                     onChange={() => setPaymentMethod('razorpay')}
-                    className="accent-[#1D4ED8]"
+                    className="accent-[#65A30D]"
                   />
                   <div>
                     <span className="font-space font-semibold text-xs block text-[#18181B]">
@@ -317,7 +317,7 @@ export const Checkout: React.FC = () => {
                 <label
                   className={`flex items-center justify-between p-3.5 border rounded-lg cursor-pointer transition-colors ${
                     paymentMethod === 'cod'
-                      ? 'border-[#1D4ED8] bg-[#EEF2FF]/60'
+                      ? 'border-[#84CC16] bg-[#F4FBE1]/70'
                       : 'border-[#E5E4DF] hover:border-[#CBD5E1] bg-[#FAF9F6]'
                   }`}
                 >
@@ -328,7 +328,7 @@ export const Checkout: React.FC = () => {
                       value="cod"
                       checked={paymentMethod === 'cod'}
                       onChange={() => setPaymentMethod('cod')}
-                      className="accent-[#1D4ED8]"
+                      className="accent-[#65A30D]"
                     />
                     <div>
                       <span className="font-space font-semibold text-xs block text-[#18181B]">
@@ -358,7 +358,7 @@ export const Checkout: React.FC = () => {
                 className="flex gap-3 text-xs justify-between items-center border-b border-[#E5E4DF] pb-2.5"
               >
                 <div className="flex gap-2.5 items-center min-w-0">
-                  <span className="font-mono font-semibold bg-[#EEF2FF] text-[#1D4ED8] px-1.5 py-0.5 rounded text-[11px] shrink-0">
+                  <span className="font-mono font-semibold bg-[#F4FBE1] border border-[#BEF264] text-[#3F6212] px-1.5 py-0.5 rounded text-[11px] shrink-0">
                     {item.quantity}x
                   </span>
                   <div className="min-w-0">
@@ -409,7 +409,7 @@ export const Checkout: React.FC = () => {
             </div>
             <div className="flex justify-between items-baseline text-lg font-bold text-[#18181B] pt-3 border-t border-[#E5E4DF]">
               <span>Final Total</span>
-              <span className="text-2xl text-[#1D4ED8] font-space font-bold">
+              <span className="text-2xl text-[#111111] font-space font-bold">
                 ₹{finalTotal.toLocaleString('en-IN')}
               </span>
             </div>
@@ -418,7 +418,7 @@ export const Checkout: React.FC = () => {
           <button
             type="submit"
             disabled={isSubmitting}
-            className="w-full py-3.5 bg-[#1D4ED8] text-white font-space font-semibold text-sm rounded-lg hover:bg-[#1E40AF] transition-colors flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+            className="w-full py-3.5 bg-[#B8F130] text-[#111111] font-space font-bold text-sm rounded-lg hover:bg-[#AAE422] transition-colors flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
           >
             {isSubmitting ? 'Processing Order...' : 'Place Order & Pay Now'}{' '}
             <ArrowRight size={16} />
@@ -426,7 +426,7 @@ export const Checkout: React.FC = () => {
 
           <div className="text-center text-xs text-[#64748B]">
             <p className="flex items-center justify-center gap-1.5">
-              <Lock size={13} className="text-[#1D4ED8]" /> 256-Bit Encrypted Secure Checkout
+              <Lock size={13} className="text-[#4D7C0F]" /> 256-Bit Encrypted Secure Checkout
             </p>
           </div>
         </div>

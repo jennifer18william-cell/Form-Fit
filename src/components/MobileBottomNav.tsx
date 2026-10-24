@@ -80,7 +80,7 @@ export const MobileBottomNav: React.FC = () => {
               {active && (
                 <motion.div
                   layoutId="mobileNavIndicator"
-                  className="absolute top-0 w-8 h-0.5 rounded-full bg-[#1D4ED8]"
+                  className="absolute top-0 w-8 h-0.5 rounded-full bg-[#65A30D]"
                   transition={{ type: 'spring', stiffness: 400, damping: 32 }}
                 />
               )}
@@ -91,10 +91,10 @@ export const MobileBottomNav: React.FC = () => {
                   className={`p-1.5 rounded-lg transition-colors ${
                     active
                       ? item.highlight
-                        ? 'bg-[#1D4ED8] text-white'
-                        : 'text-[#1D4ED8]'
+                        ? 'bg-[#B8F130] text-[#111111]'
+                        : 'text-[#4D7C0F]'
                       : item.highlight
-                      ? 'bg-[#EEF2FF] text-[#1D4ED8]'
+                      ? 'bg-[#F4FBE1] text-[#3F6212]'
                       : 'text-[#64748B] group-hover:text-[#18181B]'
                   }`}
                 >
@@ -102,7 +102,7 @@ export const MobileBottomNav: React.FC = () => {
                 </motion.div>
 
                 {item.badge !== null && (
-                  <span className="absolute -top-1 -right-1.5 bg-[#1D4ED8] text-white text-[9px] font-mono font-bold w-4 h-4 rounded-full flex items-center justify-center">
+                  <span className="absolute -top-1 -right-1.5 bg-[#B8F130] text-[#111111] text-[9px] font-mono font-bold w-4 h-4 rounded-full flex items-center justify-center">
                     {item.badge}
                   </span>
                 )}
@@ -110,7 +110,7 @@ export const MobileBottomNav: React.FC = () => {
 
               <span
                 className={`text-[10px] font-medium mt-0.5 transition-colors whitespace-nowrap ${
-                  active ? 'text-[#1D4ED8] font-semibold' : 'text-[#64748B]'
+                  active ? 'text-[#3F6212] font-semibold' : 'text-[#64748B]'
                 }`}
               >
                 {item.label}

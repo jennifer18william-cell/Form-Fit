@@ -49,7 +49,7 @@ export const OwnerCategories: React.FC = () => {
           {/* Create / Edit Form */}
           <div className="md:col-span-4 bg-white border border-[#E5E4DF] rounded-xl p-6 space-y-4">
             <h2 className="font-space font-semibold text-sm text-[#18181B] border-b border-[#E5E4DF] pb-3 flex items-center gap-2">
-              <FolderTree size={16} className="text-[#1D4ED8]" />
+              <FolderTree size={16} className="text-[#4D7C0F]" />
               <span>{editingId ? 'Edit Category' : 'Create New Category'}</span>
             </h2>
 
@@ -64,7 +64,7 @@ export const OwnerCategories: React.FC = () => {
                   placeholder="e.g. Hoodies & Sweatshirts"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  className="w-full bg-[#FAF9F6] border border-[#D6D5CE] rounded-lg px-3 py-2 text-xs text-[#18181B] focus:bg-white focus:border-[#1D4ED8] focus:ring-2 focus:ring-[#1D4ED8]/15 focus:outline-none transition-colors"
+                  className="w-full bg-[#FAF9F6] border border-[#D6D5CE] rounded-lg px-3 py-2 text-xs text-[#18181B] focus:bg-white focus:border-[#65A30D] focus:ring-2 focus:ring-[#65A30D]/15 focus:outline-none transition-colors"
                 />
               </div>
 
@@ -77,7 +77,7 @@ export const OwnerCategories: React.FC = () => {
                   placeholder="Heavyweight fleece and relaxed outerwear..."
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  className="w-full bg-[#FAF9F6] border border-[#D6D5CE] rounded-lg px-3 py-2 text-xs text-[#18181B] focus:bg-white focus:border-[#1D4ED8] focus:ring-2 focus:ring-[#1D4ED8]/15 focus:outline-none transition-colors"
+                  className="w-full bg-[#FAF9F6] border border-[#D6D5CE] rounded-lg px-3 py-2 text-xs text-[#18181B] focus:bg-white focus:border-[#65A30D] focus:ring-2 focus:ring-[#65A30D]/15 focus:outline-none transition-colors"
                 />
               </div>
 
@@ -97,7 +97,7 @@ export const OwnerCategories: React.FC = () => {
                 )}
                 <button
                   type="submit"
-                  className="flex-1 py-2.5 bg-[#1D4ED8] hover:bg-[#1E40AF] text-white rounded-lg font-space text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap"
+                  className="flex-1 py-2.5 bg-[#B8F130] hover:bg-[#AAE422] text-[#111111] rounded-lg font-space text-xs font-bold transition-colors cursor-pointer whitespace-nowrap"
                 >
                   {editingId ? 'Update Category' : 'Save Category'}
                 </button>
@@ -159,7 +159,7 @@ export const OwnerCategories: React.FC = () => {
                           <button
                             type="button"
                             onClick={() => handleEdit(cat)}
-                            className="p-1.5 bg-white border border-[#D6D5CE] rounded-md text-[#18181B] hover:border-[#1D4ED8] hover:text-[#1D4ED8] hover:bg-[#EEF2FF] transition-colors cursor-pointer"
+                            className="p-1.5 bg-white border border-[#D6D5CE] rounded-md text-[#18181B] hover:border-[#65A30D] hover:text-[#3F6212] hover:bg-[#F4FBE1] transition-colors cursor-pointer"
                             title="Edit Category"
                           >
                             <Edit size={13} />

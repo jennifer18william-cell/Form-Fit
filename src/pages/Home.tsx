@@ -13,9 +13,10 @@ import {
   Palette,
 } from 'lucide-react';
 
+import footwearStudioImg from '../assets/images/footwear_leather_sneakers_studio_1792835303853.jpg';
+import accessoriesStudioImg from '../assets/images/accessories_leather_goods_studio_1792835304388.jpg';
+
 const EDITORIAL_HERO_ASSET = '/assets/aistudio/Form___Fit__Editorial_Essentials_b0cfeab9.png';
-const FOOTWEAR_STUDIO_IMG = '/src/assets/images/footwear_leather_sneakers_studio_1792835303853.jpg';
-const ACCESSORIES_STUDIO_IMG = '/src/assets/images/accessories_leather_goods_studio_1792835304388.jpg';
 
 export const Home: React.FC = () => {
   const { products, storeSettings } = useStore();
@@ -82,7 +83,8 @@ export const Home: React.FC = () => {
       desc: 'Minimalist court sneakers, suede runners, and daily loafers.',
       link: '/shop?category=cat-9',
       imageKey: 'footwear-local',
-      fallbackImg: FOOTWEAR_STUDIO_IMG,
+      localImg: footwearStudioImg,
+      fallbackImg: 'https://images.pexels.com/photos/2529148/pexels-photo-2529148.jpeg?auto=compress&cs=tinysrgb&w=800',
     },
     {
       id: 'accessories',
@@ -90,7 +92,8 @@ export const Home: React.FC = () => {
       desc: 'Structured leather totes, brushed steel watches, and twill caps.',
       link: '/shop?category=cat-10',
       imageKey: 'accessories-local',
-      fallbackImg: ACCESSORIES_STUDIO_IMG,
+      localImg: accessoriesStudioImg,
+      fallbackImg: 'https://images.pexels.com/photos/1152077/pexels-photo-1152077.jpeg?auto=compress&cs=tinysrgb&w=800',
     },
     {
       id: 'tshirts',
@@ -293,7 +296,7 @@ export const Home: React.FC = () => {
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           {categoryCards.map((card) => {
-            const bgImage = categoryPhotos[card.imageKey] || card.fallbackImg;
+            const bgImage = card.localImg || categoryPhotos[card.imageKey] || card.fallbackImg;
 
             return (
               <Link
@@ -308,7 +311,9 @@ export const Home: React.FC = () => {
                     referrerPolicy="no-referrer"
                     className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                     onError={(e) => {
-                      (e.currentTarget as HTMLImageElement).src = card.fallbackImg;
+                      const imgEl = e.currentTarget as HTMLImageElement;
+                      imgEl.onerror = null;
+                      imgEl.src = card.fallbackImg;
                     }}
                   />
                 </div>

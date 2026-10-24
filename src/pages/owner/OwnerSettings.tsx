@@ -41,7 +41,7 @@ export const OwnerSettings: React.FC = () => {
 
   const configured = isSupabaseConfigured();
   const inputClass =
-    'w-full bg-[#FAF9F6] border border-[#D6D5CE] rounded-lg px-3 py-2 text-xs text-[#18181B] focus:bg-white focus:border-[#1D4ED8] focus:ring-2 focus:ring-[#1D4ED8]/15 focus:outline-none transition-colors';
+    'w-full bg-[#FAF9F6] border border-[#D6D5CE] rounded-lg px-3 py-2 text-xs text-[#18181B] focus:bg-white focus:border-[#65A30D] focus:ring-2 focus:ring-[#65A30D]/15 focus:outline-none transition-colors';
 
   return (
     <OwnerLayout>
@@ -58,7 +58,7 @@ export const OwnerSettings: React.FC = () => {
 
           <button
             type="submit"
-            className="px-5 py-2.5 bg-[#1D4ED8] hover:bg-[#1E40AF] text-white rounded-lg font-space text-xs font-semibold transition-colors flex items-center gap-2 cursor-pointer whitespace-nowrap shrink-0"
+            className="px-5 py-2.5 bg-[#B8F130] hover:bg-[#AAE422] text-[#111111] rounded-lg font-space text-xs font-bold transition-colors flex items-center gap-2 cursor-pointer whitespace-nowrap shrink-0"
           >
             <Save size={15} /> {savedSuccess ? 'Settings Saved' : 'Save Store Changes'}
           </button>
@@ -69,11 +69,11 @@ export const OwnerSettings: React.FC = () => {
           className={`p-4 rounded-xl border text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 ${
             configured
               ? 'bg-[#F0FDF4] border-[#BBF7D0] text-[#166534]'
-              : 'bg-[#F8FAFC] border-[#E2E8F0] text-[#334155]'
+              : 'bg-[#FAF9F6] border-[#E5E4DF] text-[#3F3F46]'
           }`}
         >
           <div className="flex items-center gap-2">
-            <Database size={16} className={configured ? 'text-[#16A34A]' : 'text-[#1D4ED8]'} />
+            <Database size={16} className={configured ? 'text-[#16A34A]' : 'text-[#4D7C0F]'} />
             <span className="font-semibold">
               {configured ? 'Live Supabase Database Connected' : 'Local Browser Storage Mode Active'}
             </span>
@@ -99,7 +99,7 @@ export const OwnerSettings: React.FC = () => {
                     type="checkbox"
                     checked={announcementEnabled}
                     onChange={(e) => setAnnouncementEnabled(e.target.checked)}
-                    className="accent-[#1D4ED8] w-4 h-4 rounded"
+                    className="accent-[#65A30D] w-4 h-4 rounded"
                   />
                   <span className="font-semibold text-[#18181B]">Enable Top Announcement Bar</span>
                 </label>
@@ -195,7 +195,7 @@ export const OwnerSettings: React.FC = () => {
                     type="checkbox"
                     checked={codEnabled}
                     onChange={(e) => setCodEnabled(e.target.checked)}
-                    className="accent-[#1D4ED8] w-4 h-4 rounded"
+                    className="accent-[#65A30D] w-4 h-4 rounded"
                   />
                   <span className="font-semibold text-[#18181B]">
                     Enable Cash on Delivery (COD) Option

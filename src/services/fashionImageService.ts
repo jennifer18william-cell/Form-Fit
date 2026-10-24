@@ -1,3 +1,6 @@
+import footwearStudioImg from '../assets/images/footwear_leather_sneakers_studio_1792835303853.jpg';
+import accessoriesStudioImg from '../assets/images/accessories_leather_goods_studio_1792835304388.jpg';
+
 export interface FashionPhoto {
   id: string;
   url: string;
@@ -17,6 +20,22 @@ export interface FashionApiResponse {
 
 // Category-Specific Fallback Mapping (Used when API is unavailable or on static hosting)
 const CATEGORY_FALLBACK_PHOTOS: Record<string, FashionPhoto[]> = {
+  footwear: [
+    {
+      id: 'fw-1',
+      url: footwearStudioImg,
+      alt: 'Minimalist Leather Court Sneakers Studio Poster',
+      photographer: 'Form & Fit Studio',
+    },
+  ],
+  accessories: [
+    {
+      id: 'acc-1',
+      url: accessoriesStudioImg,
+      alt: 'Structured Leather Tote & Lifestyle Accessories Studio Poster',
+      photographer: 'Form & Fit Studio',
+    },
+  ],
   'mens-fashion': [
     {
       id: 'm-1',

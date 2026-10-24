@@ -46,7 +46,7 @@ export const OwnerInventory: React.FC = () => {
               placeholder="Search inventory by product name or variant SKU..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-[#FAF9F6] border border-[#D6D5CE] rounded-lg px-3 py-2 pl-9 text-xs text-[#18181B] focus:bg-white focus:border-[#1D4ED8] focus:ring-2 focus:ring-[#1D4ED8]/15 focus:outline-none transition-colors"
+              className="w-full bg-[#FAF9F6] border border-[#D6D5CE] rounded-lg px-3 py-2 pl-9 text-xs text-[#18181B] focus:bg-white focus:border-[#65A30D] focus:ring-2 focus:ring-[#65A30D]/15 focus:outline-none transition-colors"
             />
             <Search size={14} className="absolute left-3 top-2.5 text-[#64748B]" />
           </div>
@@ -56,7 +56,7 @@ export const OwnerInventory: React.FC = () => {
         <div className="bg-white border border-[#E5E4DF] rounded-xl overflow-hidden">
           <div className="p-4 border-b border-[#E5E4DF] flex justify-between items-center">
             <h2 className="font-space font-semibold text-sm text-[#18181B] flex items-center gap-2 tabular-nums">
-              <Boxes size={16} className="text-[#1D4ED8]" /> All Active Product Variants ({filteredVariants.length})
+              <Boxes size={16} className="text-[#4D7C0F]" /> All Active Product Variants ({filteredVariants.length})
             </h2>
           </div>
 
@@ -116,7 +116,7 @@ export const OwnerInventory: React.FC = () => {
                             <button
                               type="button"
                               onClick={() => adjustVariantStock(v.variantId, 1, 'Manual owner restock')}
-                              className="px-2.5 py-1 bg-[#EEF2FF] hover:bg-[#DBEAFE] border border-[#C7D2FE] text-[#1D4ED8] rounded-md font-semibold cursor-pointer transition-colors"
+                              className="px-2.5 py-1 bg-[#F4FBE1] hover:bg-[#ECFCCB] border border-[#BEF264] text-[#3F6212] rounded-md font-semibold cursor-pointer transition-colors"
                               title="Add 1"
                             >
                               +1
@@ -124,7 +124,7 @@ export const OwnerInventory: React.FC = () => {
                             <button
                               type="button"
                               onClick={() => adjustVariantStock(v.variantId, 10, 'Batch restock (+10)')}
-                              className="px-2.5 py-1 bg-[#1D4ED8] hover:bg-[#1E40AF] text-white rounded-md font-semibold cursor-pointer transition-colors"
+                              className="px-2.5 py-1 bg-[#B8F130] hover:bg-[#AAE422] text-[#111111] rounded-md font-bold cursor-pointer transition-colors"
                               title="Batch Restock 10"
                             >
                               +10
@@ -143,7 +143,7 @@ export const OwnerInventory: React.FC = () => {
         {/* Inventory Audit Movement Log */}
         <div className="bg-white border border-[#E5E4DF] rounded-xl p-6 space-y-4">
           <h2 className="font-space font-semibold text-sm text-[#18181B] flex items-center gap-2 border-b border-[#E5E4DF] pb-3">
-            <History size={16} className="text-[#1D4ED8]" /> Inventory Audit Logs
+            <History size={16} className="text-[#4D7C0F]" /> Inventory Audit Logs
           </h2>
 
           {inventoryLogs.length === 0 ? (

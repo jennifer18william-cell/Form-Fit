@@ -6,6 +6,9 @@
  * Eliminates browser LocalStorage QuotaExceededError and delivers ultra-fast rendering.
  */
 
+import footwearStudioImg from '../assets/images/footwear_leather_sneakers_studio_1792835303853.jpg';
+import accessoriesStudioImg from '../assets/images/accessories_leather_goods_studio_1792835304388.jpg';
+
 export interface OptimizedImageResult {
   dataUrl: string;
   blob: Blob;
@@ -225,6 +228,20 @@ export const FASHION_PRESETS: FashionPreset[] = [
     url: 'https://images.unsplash.com/photo-1576566588028-4147f3842f27?auto=format&fit=crop&w=1200&q=80',
     thumb: 'https://images.unsplash.com/photo-1576566588028-4147f3842f27?auto=format&fit=crop&w=200&q=70',
   },
+  {
+    id: 'preset-footwear-court',
+    name: 'Minimalist Leather Court Sneakers',
+    category: 'Footwear',
+    url: footwearStudioImg,
+    thumb: footwearStudioImg,
+  },
+  {
+    id: 'preset-accessories-leather',
+    name: 'Structured Leather Tote & Essentials',
+    category: 'Accessories',
+    url: accessoriesStudioImg,
+    thumb: accessoriesStudioImg,
+  },
 ];
 
 /**
@@ -234,6 +251,25 @@ export const FASHION_PRESETS: FashionPreset[] = [
 export function getFashionFallbackImage(productName?: string, categoryName?: string): string {
   const query = `${productName || ''} ${categoryName || ''}`.toLowerCase();
 
+  if (
+    query.includes('shoe') ||
+    query.includes('sneaker') ||
+    query.includes('loafer') ||
+    query.includes('boot') ||
+    query.includes('footwear')
+  ) {
+    return footwearStudioImg;
+  }
+  if (
+    query.includes('bag') ||
+    query.includes('tote') ||
+    query.includes('watch') ||
+    query.includes('cap') ||
+    query.includes('belt') ||
+    query.includes('accessor')
+  ) {
+    return accessoriesStudioImg;
+  }
   if (query.includes('hoodie') || query.includes('sweat')) {
     return FASHION_PRESETS[4].url;
   }

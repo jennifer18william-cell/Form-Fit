@@ -11,7 +11,7 @@ export const WishlistPage: React.FC = () => {
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-8 text-[#18181B]">
       <div className="border-b border-[#E5E4DF] pb-4 flex justify-between items-end">
         <div>
-          <span className="text-xs font-space font-semibold uppercase tracking-wider text-[#1D4ED8]">
+          <span className="text-xs font-space font-semibold uppercase tracking-wider text-[#4D7C0F]">
             Saved Preferences
           </span>
           <h1 className="font-space font-bold text-3xl tracking-tight text-[#18181B] mt-0.5">
@@ -31,7 +31,7 @@ export const WishlistPage: React.FC = () => {
           </p>
           <Link
             to="/shop"
-            className="inline-block px-6 py-3 bg-[#1D4ED8] text-white font-space font-semibold text-xs rounded-md hover:bg-[#1E40AF] transition-colors"
+            className="inline-block px-6 py-3 bg-[#B8F130] text-[#111111] font-space font-bold text-xs rounded-md hover:bg-[#AAE422] transition-colors"
           >
             Explore Catalog
           </Link>

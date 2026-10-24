@@ -119,7 +119,7 @@ export const CustomerAuth: React.FC = () => {
         {/* Brand Header */}
         <div className="text-center space-y-1.5">
           <Link to="/" className="inline-block">
-            <span className="font-space font-bold text-2xl tracking-tight text-[#18181B] hover:text-[#1D4ED8] transition-colors">
+            <span className="font-space font-bold text-2xl tracking-tight text-[#18181B] hover:text-[#4D7C0F] transition-colors">
               Form &amp; Fit
             </span>
           </Link>
@@ -227,7 +227,7 @@ export const CustomerAuth: React.FC = () => {
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-3 bg-[#1D4ED8] text-white font-space font-semibold text-sm flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 rounded-lg hover:bg-[#1E40AF] transition-colors"
+              className="w-full py-3 bg-[#B8F130] text-[#111111] font-space font-bold text-sm flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 rounded-lg hover:bg-[#AAE422] transition-colors"
             >
               {loading ? (
                 <span>Authenticating...</span>
@@ -355,7 +355,7 @@ export const CustomerAuth: React.FC = () => {
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-3 bg-[#1D4ED8] text-white font-space font-semibold text-sm flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 rounded-lg hover:bg-[#1E40AF] transition-colors"
+              className="w-full py-3 bg-[#B8F130] text-[#111111] font-space font-bold text-sm flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 rounded-lg hover:bg-[#AAE422] transition-colors"
             >
               {loading ? (
                 <span>Creating Account...</span>
@@ -372,7 +372,7 @@ export const CustomerAuth: React.FC = () => {
         <div className="pt-4 border-t border-[#E5E4DF] text-center">
           <Link
             to="/owner/login"
-            className="text-xs font-medium text-[#1D4ED8] hover:underline flex items-center justify-center gap-1.5"
+            className="text-xs font-medium text-[#4D7C0F] hover:underline flex items-center justify-center gap-1.5"
           >
             <ShieldCheck size={14} /> Store Owner / Admin Portal Access
           </Link>

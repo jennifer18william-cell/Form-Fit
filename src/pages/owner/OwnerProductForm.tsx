@@ -327,7 +327,7 @@ export const OwnerProductForm: React.FC = () => {
   };
 
   const inputClass =
-    'w-full bg-[#FAF9F6] border border-[#D6D5CE] rounded-lg px-3 py-2 text-xs text-[#18181B] focus:bg-white focus:border-[#1D4ED8] focus:ring-2 focus:ring-[#1D4ED8]/15 focus:outline-none transition-colors';
+    'w-full bg-[#FAF9F6] border border-[#D6D5CE] rounded-lg px-3 py-2 text-xs text-[#18181B] focus:bg-white focus:border-[#65A30D] focus:ring-2 focus:ring-[#65A30D]/15 focus:outline-none transition-colors';
 
   return (
     <OwnerLayout>
@@ -337,7 +337,7 @@ export const OwnerProductForm: React.FC = () => {
           <div className="flex items-center gap-3">
             <Link
               to="/owner/products"
-              className="p-2 bg-white border border-[#D6D5CE] rounded-lg text-[#18181B] hover:border-[#1D4ED8] hover:text-[#1D4ED8] hover:bg-[#EEF2FF] transition-colors"
+              className="p-2 bg-white border border-[#D6D5CE] rounded-lg text-[#18181B] hover:border-[#65A30D] hover:text-[#3F6212] hover:bg-[#F4FBE1] transition-colors"
               aria-label="Back to catalog"
             >
               <ArrowLeft size={16} />
@@ -356,7 +356,7 @@ export const OwnerProductForm: React.FC = () => {
             <select
               value={status}
               onChange={(e) => setStatus(e.target.value as ProductStatus)}
-              className="bg-white border border-[#D6D5CE] rounded-lg px-3 py-2.5 text-xs font-semibold text-[#18181B] focus:border-[#1D4ED8] focus:outline-none cursor-pointer"
+              className="bg-white border border-[#D6D5CE] rounded-lg px-3 py-2.5 text-xs font-semibold text-[#18181B] focus:border-[#65A30D] focus:outline-none cursor-pointer"
             >
               <option value="published">Published</option>
               <option value="draft">Draft</option>
@@ -366,7 +366,7 @@ export const OwnerProductForm: React.FC = () => {
             <button
               type="submit"
               disabled={isSaving}
-              className="px-5 py-2.5 bg-[#1D4ED8] hover:bg-[#1E40AF] text-white rounded-lg font-space font-semibold text-xs transition-colors flex items-center gap-2 cursor-pointer disabled:opacity-50 whitespace-nowrap shrink-0"
+              className="px-5 py-2.5 bg-[#B8F130] hover:bg-[#AAE422] text-[#111111] rounded-lg font-space font-bold text-xs transition-colors flex items-center gap-2 cursor-pointer disabled:opacity-50 whitespace-nowrap shrink-0"
             >
               <Save size={15} /> {isSaving ? 'Saving...' : 'Save Product'}
             </button>
@@ -381,7 +381,7 @@ export const OwnerProductForm: React.FC = () => {
                 ? 'bg-[#F0FDF4] border-[#BBF7D0] text-[#166534]'
                 : uploadFeedback.type === 'error'
                 ? 'bg-[#FEF2F2] border-[#FECACA] text-[#991B1B]'
-                : 'bg-[#EEF2FF] border-[#C7D2FE] text-[#1E3A8A]'
+                : 'bg-[#F4FBE1] border-[#BEF264] text-[#3F6212]'
             }`}
           >
             {uploadFeedback.type === 'success' ? (
@@ -389,7 +389,7 @@ export const OwnerProductForm: React.FC = () => {
             ) : (
               <AlertCircle
                 size={16}
-                className={uploadFeedback.type === 'error' ? 'text-[#DC2626] shrink-0' : 'text-[#1D4ED8] shrink-0'}
+                className={uploadFeedback.type === 'error' ? 'text-[#DC2626] shrink-0' : 'text-[#4D7C0F] shrink-0'}
               />
             )}
             <span>{uploadFeedback.text}</span>
@@ -479,7 +479,7 @@ export const OwnerProductForm: React.FC = () => {
             <div className="bg-white border border-[#E5E4DF] rounded-xl p-6 space-y-4">
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b border-[#E5E4DF] pb-3">
                 <div className="flex items-center gap-2">
-                  <ImageIcon size={18} className="text-[#1D4ED8]" />
+                  <ImageIcon size={18} className="text-[#4D7C0F]" />
                   <h2 className="font-space font-semibold text-sm text-[#18181B] tabular-nums">
                     Product Photography ({images.length})
                   </h2>
@@ -492,7 +492,7 @@ export const OwnerProductForm: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setShowPresets(!showPresets)}
-                  className="px-3 py-1.5 text-xs font-medium rounded-lg border border-[#D6D5CE] bg-[#FAF9F6] hover:bg-[#EEF2FF] hover:border-[#C7D2FE] hover:text-[#1D4ED8] text-[#18181B] transition-colors flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
+                  className="px-3 py-1.5 text-xs font-medium rounded-lg border border-[#D6D5CE] bg-[#FAF9F6] hover:bg-[#F4FBE1] hover:border-[#BEF264] hover:text-[#3F6212] text-[#18181B] transition-colors flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
                 >
                   <FolderOpen size={13} /> {showPresets ? 'Hide Studio Presets' : 'Studio Preset Library'}
                 </button>
@@ -513,7 +513,7 @@ export const OwnerProductForm: React.FC = () => {
                         key={preset.id}
                         type="button"
                         onClick={() => handleSelectPreset(preset.url)}
-                        className="group relative aspect-[3/4] bg-white border border-[#E5E4DF] hover:border-[#1D4ED8] rounded-lg overflow-hidden text-left cursor-pointer transition-all"
+                        className="group relative aspect-[3/4] bg-white border border-[#E5E4DF] hover:border-[#65A30D] rounded-lg overflow-hidden text-left cursor-pointer transition-all"
                       >
                         <img
                           src={preset.thumb}
@@ -540,12 +540,12 @@ export const OwnerProductForm: React.FC = () => {
                 onDragLeave={() => setIsDragOver(false)}
                 onDrop={handleDrop}
                 className={`border-2 border-dashed rounded-xl p-6 text-center space-y-3 transition-colors ${
-                  isDragOver ? 'border-[#1D4ED8] bg-[#EEF2FF]/60' : 'border-[#D6D5CE] bg-[#FAF9F6]'
+                  isDragOver ? 'border-[#65A30D] bg-[#F4FBE1]/70' : 'border-[#D6D5CE] bg-[#FAF9F6]'
                 }`}
               >
                 <Upload
                   size={28}
-                  className={`mx-auto ${isDragOver ? 'text-[#1D4ED8]' : 'text-[#64748B]'}`}
+                  className={`mx-auto ${isDragOver ? 'text-[#4D7C0F]' : 'text-[#64748B]'}`}
                 />
                 <div className="space-y-1">
                   <p className="text-xs font-semibold text-[#18181B]">
@@ -567,7 +567,7 @@ export const OwnerProductForm: React.FC = () => {
                 />
                 <label
                   htmlFor="image-upload-input"
-                  className="inline-block px-4 py-2 bg-[#1D4ED8] hover:bg-[#1E40AF] text-white rounded-lg font-space text-xs font-semibold cursor-pointer transition-colors"
+                  className="inline-block px-4 py-2 bg-[#B8F130] hover:bg-[#AAE422] text-[#111111] rounded-lg font-space text-xs font-bold cursor-pointer transition-colors"
                 >
                   {isUploading ? 'Processing...' : 'Browse Device Photos'}
                 </label>
@@ -587,14 +587,14 @@ export const OwnerProductForm: React.FC = () => {
                         handleAddImageUrl();
                       }
                     }}
-                    className="w-full bg-white border border-[#D6D5CE] rounded-lg px-3 py-2 text-xs font-mono pl-9 text-[#18181B] focus:border-[#1D4ED8] focus:outline-none"
+                    className="w-full bg-white border border-[#D6D5CE] rounded-lg px-3 py-2 text-xs font-mono pl-9 text-[#18181B] focus:border-[#65A30D] focus:outline-none"
                   />
                   <LinkIcon size={14} className="absolute left-3 top-2.5 text-[#64748B]" />
                 </div>
                 <button
                   type="button"
                   onClick={handleAddImageUrl}
-                  className="px-4 py-2 bg-[#1D4ED8] hover:bg-[#1E40AF] text-white rounded-lg font-space text-xs font-semibold transition-colors shrink-0 w-full sm:w-auto cursor-pointer whitespace-nowrap"
+                  className="px-4 py-2 bg-[#B8F130] hover:bg-[#AAE422] text-[#111111] rounded-lg font-space text-xs font-bold transition-colors shrink-0 w-full sm:w-auto cursor-pointer whitespace-nowrap"
                 >
                   Add Image URL
                 </button>
@@ -612,7 +612,7 @@ export const OwnerProductForm: React.FC = () => {
                         key={img.id || idx}
                         className={`relative aspect-[3/4] bg-[#F3F2EE] rounded-lg border group overflow-hidden ${
                           img.is_main
-                            ? 'border-2 border-[#1D4ED8] ring-2 ring-[#DBEAFE]'
+                            ? 'border-2 border-[#65A30D] ring-2 ring-[#ECFCCB]'
                             : 'border-[#E5E4DF]'
                         }`}
                       >
@@ -627,8 +627,8 @@ export const OwnerProductForm: React.FC = () => {
                         />
 
                         {img.is_main && (
-                          <div className="absolute top-2 left-2 bg-white/95 border border-[#C7D2FE] text-[#1D4ED8] text-[10px] font-semibold px-2 py-0.5 rounded-md shadow-xs flex items-center gap-1">
-                            <Star size={10} className="fill-[#1D4ED8]" /> Main
+                          <div className="absolute top-2 left-2 bg-white/95 border border-[#BEF264] text-[#3F6212] text-[10px] font-semibold px-2 py-0.5 rounded-md shadow-xs flex items-center gap-1">
+                            <Star size={10} className="fill-[#B8F130] text-[#3F6212]" /> Main
                           </div>
                         )}
 
@@ -646,7 +646,7 @@ export const OwnerProductForm: React.FC = () => {
                             <button
                               type="button"
                               onClick={() => setMainImage(img.id)}
-                              className="w-full py-1.5 bg-[#1D4ED8] hover:bg-[#1E40AF] text-white rounded-md font-space text-[11px] font-semibold cursor-pointer transition-colors"
+                              className="w-full py-1.5 bg-[#B8F130] hover:bg-[#AAE422] text-[#111111] rounded-md font-space text-[11px] font-bold cursor-pointer transition-colors"
                             >
                               Set as Main
                             </button>
@@ -675,7 +675,7 @@ export const OwnerProductForm: React.FC = () => {
                 <button
                   type="button"
                   onClick={addVariantRow}
-                  className="px-3 py-1.5 bg-[#EEF2FF] hover:bg-[#DBEAFE] border border-[#C7D2FE] text-[#1D4ED8] rounded-lg font-space text-xs font-semibold flex items-center gap-1 cursor-pointer transition-colors whitespace-nowrap"
+                  className="px-3 py-1.5 bg-[#F4FBE1] hover:bg-[#ECFCCB] border border-[#BEF264] text-[#3F6212] rounded-lg font-space text-xs font-semibold flex items-center gap-1 cursor-pointer transition-colors whitespace-nowrap"
                 >
                   <Plus size={14} /> Add Variant
                 </button>
@@ -693,7 +693,7 @@ export const OwnerProductForm: React.FC = () => {
                         type="text"
                         value={v.sku}
                         onChange={(e) => updateVariantRow(idx, { sku: e.target.value })}
-                        className="w-full bg-white border border-[#D6D5CE] rounded-md px-2 py-1.5 font-mono text-xs text-[#18181B] focus:border-[#1D4ED8] focus:outline-none"
+                        className="w-full bg-white border border-[#D6D5CE] rounded-md px-2 py-1.5 font-mono text-xs text-[#18181B] focus:border-[#65A30D] focus:outline-none"
                       />
                     </div>
                     <div className="col-span-2">
@@ -703,7 +703,7 @@ export const OwnerProductForm: React.FC = () => {
                         placeholder="S, M, L"
                         value={v.size || ''}
                         onChange={(e) => updateVariantRow(idx, { size: e.target.value })}
-                        className="w-full bg-white border border-[#D6D5CE] rounded-md px-2 py-1.5 font-mono text-xs uppercase text-[#18181B] focus:border-[#1D4ED8] focus:outline-none"
+                        className="w-full bg-white border border-[#D6D5CE] rounded-md px-2 py-1.5 font-mono text-xs uppercase text-[#18181B] focus:border-[#65A30D] focus:outline-none"
                       />
                     </div>
                     <div className="col-span-3">
@@ -713,7 +713,7 @@ export const OwnerProductForm: React.FC = () => {
                         placeholder="Ivory, Slate..."
                         value={v.color || ''}
                         onChange={(e) => updateVariantRow(idx, { color: e.target.value })}
-                        className="w-full bg-white border border-[#D6D5CE] rounded-md px-2 py-1.5 text-xs text-[#18181B] focus:border-[#1D4ED8] focus:outline-none"
+                        className="w-full bg-white border border-[#D6D5CE] rounded-md px-2 py-1.5 text-xs text-[#18181B] focus:border-[#65A30D] focus:outline-none"
                       />
                     </div>
                     <div className="col-span-3">
@@ -723,7 +723,7 @@ export const OwnerProductForm: React.FC = () => {
                         min="0"
                         value={v.stock_quantity}
                         onChange={(e) => updateVariantRow(idx, { stock_quantity: Number(e.target.value) })}
-                        className="w-full bg-white border border-[#D6D5CE] rounded-md px-2 py-1.5 font-mono text-xs tabular-nums text-[#18181B] focus:border-[#1D4ED8] focus:outline-none"
+                        className="w-full bg-white border border-[#D6D5CE] rounded-md px-2 py-1.5 font-mono text-xs tabular-nums text-[#18181B] focus:border-[#65A30D] focus:outline-none"
                       />
                     </div>
                     <div className="col-span-1 text-center">
@@ -860,7 +860,7 @@ export const OwnerProductForm: React.FC = () => {
                       type="checkbox"
                       checked={featured}
                       onChange={(e) => setFeatured(e.target.checked)}
-                      className="accent-[#1D4ED8] w-4 h-4 rounded"
+                      className="accent-[#65A30D] w-4 h-4 rounded"
                     />
                     <span className="font-semibold text-xs text-[#18181B]">Feature on Homepage Grid</span>
                   </label>

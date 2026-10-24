@@ -27,7 +27,7 @@ export const OwnerCoupons: React.FC = () => {
 
         <div className="bg-white border border-[#E5E4DF] rounded-xl p-6 space-y-4">
           <h2 className="font-space font-semibold text-sm text-[#18181B] flex items-center gap-2 border-b border-[#E5E4DF] pb-3 tabular-nums">
-            <Ticket size={16} className="text-[#1D4ED8]" /> Active Promo Codes ({coupons.length})
+            <Ticket size={16} className="text-[#4D7C0F]" /> Active Promo Codes ({coupons.length})
           </h2>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
@@ -45,7 +45,7 @@ export const OwnerCoupons: React.FC = () => {
                       Active
                     </span>
                   </div>
-                  <p className="text-xs font-semibold text-[#1D4ED8] tabular-nums">
+                  <p className="text-xs font-semibold text-[#4D7C0F] tabular-nums">
                     {c.discount_type === 'percentage'
                       ? `${c.discount_value}% Off Order`
                       : `₹${c.discount_value.toLocaleString('en-IN')} Off Order`}
@@ -58,7 +58,7 @@ export const OwnerCoupons: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => handleCopy(c.id, c.code)}
-                  className="w-full py-1.5 px-3 bg-white hover:bg-[#EEF2FF] border border-[#D6D5CE] hover:border-[#C7D2FE] text-[#18181B] hover:text-[#1D4ED8] rounded-lg text-xs font-medium flex items-center justify-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap"
+                  className="w-full py-1.5 px-3 bg-white hover:bg-[#F4FBE1] border border-[#D6D5CE] hover:border-[#BEF264] text-[#18181B] hover:text-[#3F6212] rounded-lg text-xs font-medium flex items-center justify-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap"
                 >
                   {copiedId === c.id ? (
                     <>

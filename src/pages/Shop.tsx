@@ -109,7 +109,7 @@ export const Shop: React.FC = () => {
     <div className="space-y-6">
       <div className="flex justify-between items-center border-b border-[#E5E4DF] pb-3">
         <h3 className="font-space font-semibold text-xs uppercase tracking-wider flex items-center gap-2 text-[#18181B]">
-          <Filter size={14} className="text-[#1D4ED8]" /> Filter Catalog
+          <Filter size={14} className="text-[#4D7C0F]" /> Filter Catalog
         </h3>
         {(selectedCategory || selectedGender || selectedSize || searchQuery || priceMax < 10000) && (
           <button
@@ -131,7 +131,7 @@ export const Shop: React.FC = () => {
               onClick={() => handleGenderChange(g)}
               className={`block w-full text-left py-1.5 px-2.5 font-medium transition-colors cursor-pointer rounded-md ${
                 selectedGender === g
-                  ? 'bg-[#EEF2FF] text-[#1D4ED8] font-semibold'
+                  ? 'bg-[#F4FBE1] text-[#111111] font-semibold border border-[#BEF264]'
                   : 'hover:bg-[#F3F2EE] text-[#52525B]'
               }`}
             >
@@ -149,7 +149,7 @@ export const Shop: React.FC = () => {
             onClick={() => handleCategoryChange('')}
             className={`block w-full text-left py-1.5 px-2.5 font-medium cursor-pointer rounded-md transition-colors ${
               !selectedCategory
-                ? 'bg-[#EEF2FF] text-[#1D4ED8] font-semibold'
+                ? 'bg-[#F4FBE1] text-[#111111] font-semibold border border-[#BEF264]'
                 : 'hover:bg-[#F3F2EE] text-[#52525B]'
             }`}
           >
@@ -161,7 +161,7 @@ export const Shop: React.FC = () => {
               onClick={() => handleCategoryChange(cat.id)}
               className={`block w-full text-left py-1.5 px-2.5 font-medium cursor-pointer rounded-md transition-colors ${
                 selectedCategory === cat.id
-                  ? 'bg-[#EEF2FF] text-[#1D4ED8] font-semibold'
+                  ? 'bg-[#F4FBE1] text-[#111111] font-semibold border border-[#BEF264]'
                   : 'hover:bg-[#F3F2EE] text-[#52525B]'
               }`}
             >
@@ -179,8 +179,8 @@ export const Shop: React.FC = () => {
             onClick={() => setSelectedSize('')}
             className={`px-2.5 py-1 text-[11px] font-mono border cursor-pointer rounded-md transition-colors ${
               !selectedSize
-                ? 'bg-[#1D4ED8] text-white border-[#1D4ED8] font-semibold'
-                : 'bg-white border-[#D6D5CE] text-[#52525B] hover:border-[#94A3B8]'
+                ? 'bg-[#B8F130] text-[#111111] border-[#9ED912] font-bold'
+                : 'bg-white border-[#D6D5CE] text-[#52525B] hover:border-[#65A30D]'
             }`}
           >
             All
@@ -191,8 +191,8 @@ export const Shop: React.FC = () => {
               onClick={() => setSelectedSize(sz === selectedSize ? '' : sz)}
               className={`px-2.5 py-1 text-[11px] font-mono border cursor-pointer rounded-md transition-colors ${
                 selectedSize === sz
-                  ? 'bg-[#1D4ED8] text-white border-[#1D4ED8] font-semibold'
-                  : 'bg-white border-[#D6D5CE] text-[#52525B] hover:border-[#94A3B8]'
+                  ? 'bg-[#B8F130] text-[#111111] border-[#9ED912] font-bold'
+                  : 'bg-white border-[#D6D5CE] text-[#52525B] hover:border-[#65A30D]'
               }`}
             >
               {sz}
@@ -205,7 +205,7 @@ export const Shop: React.FC = () => {
       <div className="space-y-2 pt-3 border-t border-[#E5E4DF]">
         <div className="flex justify-between items-center text-xs font-space font-semibold text-[#18181B]">
           <span>Max Price</span>
-          <span className="text-[#1D4ED8] font-mono tabular-nums">
+          <span className="text-[#3F6212] font-mono tabular-nums font-bold">
             ₹{priceMax.toLocaleString('en-IN')}
           </span>
         </div>
@@ -216,7 +216,7 @@ export const Shop: React.FC = () => {
           step="500"
           value={priceMax}
           onChange={(e) => setPriceMax(Number(e.target.value))}
-          className="w-full accent-[#1D4ED8] cursor-pointer"
+          className="w-full accent-[#65A30D] cursor-pointer"
         />
       </div>
     </div>
@@ -227,12 +227,16 @@ export const Shop: React.FC = () => {
       {/* Header */}
       <div className="border-b border-[#E5E4DF] pb-6 flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
-          <span className="text-xs font-space font-semibold uppercase tracking-wider text-[#1D4ED8]">
+          <span className="text-xs font-space font-bold uppercase tracking-wider text-[#4D7C0F]">
             Form &amp; Fit Collection
           </span>
           <h1 className="font-space font-bold text-3xl tracking-tight text-[#18181B] mt-0.5">
             {selectedGender
-              ? `${selectedGender}'s Fashion`
+              ? ['Footwear', 'Accessories', 'Unisex'].includes(selectedGender)
+                ? selectedGender === 'Unisex'
+                  ? 'Unisex Streetwear'
+                  : selectedGender
+                : `${selectedGender}'s Fashion`
               : selectedCategory
               ? categories.find((c) => c.id === selectedCategory)?.name || 'Category'
               : 'Shop All Catalog'}
@@ -249,9 +253,9 @@ export const Shop: React.FC = () => {
         <div className="flex items-center gap-3">
           <button
             onClick={() => setIsMobileFilterOpen(true)}
-            className="md:hidden flex items-center gap-2 px-3.5 py-2 bg-white border border-[#D6D5CE] font-space text-xs font-semibold text-[#18181B] hover:border-[#1D4ED8] cursor-pointer rounded-md whitespace-nowrap"
+            className="md:hidden flex items-center gap-2 px-3.5 py-2 bg-white border border-[#D6D5CE] font-space text-xs font-semibold text-[#18181B] hover:border-[#65A30D] cursor-pointer rounded-md whitespace-nowrap"
           >
-            <SlidersHorizontal size={14} className="text-[#1D4ED8]" /> Filters
+            <SlidersHorizontal size={14} className="text-[#4D7C0F]" /> Filters
           </button>
 
           <div className="flex items-center gap-2">
@@ -259,7 +263,7 @@ export const Shop: React.FC = () => {
             <select
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value)}
-              className="bg-white border border-[#D6D5CE] px-3 py-2 font-sans text-xs font-medium text-[#18181B] focus:outline-none focus:border-[#1D4ED8] cursor-pointer rounded-md"
+              className="bg-white border border-[#D6D5CE] px-3 py-2 font-sans text-xs font-medium text-[#18181B] focus:outline-none focus:border-[#65A30D] cursor-pointer rounded-md"
             >
               <option value="newest">Newest Drops</option>
               <option value="recommended">Recommended</option>
@@ -291,7 +295,7 @@ export const Shop: React.FC = () => {
             {renderFilterControls()}
             <button
               onClick={() => setIsMobileFilterOpen(false)}
-              className="w-full py-2.5 bg-[#1D4ED8] text-white font-space font-semibold text-xs rounded-md hover:bg-[#1E40AF] cursor-pointer"
+              className="w-full py-2.5 bg-[#B8F130] hover:bg-[#AAE422] text-[#111111] font-space font-extrabold text-xs uppercase tracking-wider rounded-md cursor-pointer transition-colors"
             >
               Apply Filters ({filteredProducts.length})
             </button>
@@ -337,7 +341,7 @@ export const Shop: React.FC = () => {
                 </p>
                 <button
                   onClick={clearAllFilters}
-                  className="px-6 py-2.5 bg-[#1D4ED8] text-white font-space font-semibold text-xs cursor-pointer rounded-md hover:bg-[#1E40AF] transition-colors"
+                  className="px-6 py-2.5 bg-[#B8F130] hover:bg-[#AAE422] text-[#111111] font-space font-extrabold text-xs uppercase tracking-wider cursor-pointer rounded-md transition-colors"
                 >
                   Clear All Filters
                 </button>

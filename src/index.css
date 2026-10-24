@@ -53,13 +53,13 @@ h1, h2, h3, h4, .font-heading {
 
 /* Light Surface & Accent Utilities */
 .glow-border-lime {
-  border: 1px solid #C7D2FE;
-  box-shadow: 0 2px 10px rgba(29, 78, 216, 0.06);
+  border: 1px solid #BEF264;
+  box-shadow: 0 2px 10px rgba(101, 163, 13, 0.08);
 }
 
 .glow-border-lime-active {
-  border: 1px solid #1D4ED8;
-  box-shadow: 0 4px 14px rgba(29, 78, 216, 0.12);
+  border: 1px solid #65A30D;
+  box-shadow: 0 4px 14px rgba(101, 163, 13, 0.14);
 }
 
 .glow-box-card {
@@ -83,27 +83,27 @@ h1, h2, h3, h4, .font-heading {
 
 .glow-input:focus {
   outline: none;
-  border-color: #1D4ED8;
-  box-shadow: 0 0 0 3px rgba(29, 78, 216, 0.12);
+  border-color: #65A30D;
+  box-shadow: 0 0 0 3px rgba(101, 163, 13, 0.14);
   background: #FFFFFF;
 }
 
 .glow-btn-primary {
-  background-color: #1D4ED8;
-  color: #FFFFFF;
+  background-color: #B8F130;
+  color: #111111;
   font-family: 'Outfit', sans-serif;
   font-weight: 700;
   letter-spacing: 0.04em;
   transition: background-color 0.18s cubic-bezier(0.16, 1, 0.3, 1), transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.18s cubic-bezier(0.16, 1, 0.3, 1);
-  box-shadow: 0 2px 8px rgba(29, 78, 216, 0.18);
+  box-shadow: 0 2px 8px rgba(101, 163, 13, 0.16);
   position: relative;
   overflow: hidden;
 }
 
 .glow-btn-primary:hover {
-  background-color: #1E40AF;
-  color: #FFFFFF;
-  box-shadow: 0 4px 14px rgba(30, 64, 175, 0.24);
+  background-color: #AAE422;
+  color: #111111;
+  box-shadow: 0 4px 14px rgba(101, 163, 13, 0.22);
   transform: translateY(-1px);
 }
 

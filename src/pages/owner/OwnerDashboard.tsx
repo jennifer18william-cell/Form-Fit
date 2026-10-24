@@ -38,7 +38,7 @@ export const OwnerDashboard: React.FC = () => {
           </div>
           <Link
             to="/owner/products/new"
-            className="px-4 py-2.5 bg-[#1D4ED8] hover:bg-[#1E40AF] text-white rounded-lg font-space text-xs font-semibold flex items-center gap-1.5 transition-colors whitespace-nowrap shrink-0"
+            className="px-4 py-2.5 bg-[#B8F130] hover:bg-[#AAE422] text-[#111111] rounded-lg font-space text-xs font-bold flex items-center gap-1.5 transition-colors whitespace-nowrap shrink-0"
           >
             <PlusCircle size={15} /> Add New Product
           </Link>
@@ -49,7 +49,7 @@ export const OwnerDashboard: React.FC = () => {
           <div className="bg-white border border-[#E5E4DF] rounded-xl p-5 space-y-2">
             <div className="flex justify-between items-center text-[#64748B] text-xs font-medium">
               <span>Gross Sales (Paid)</span>
-              <IndianRupee size={16} className="text-[#1D4ED8]" />
+              <IndianRupee size={16} className="text-[#4D7C0F]" />
             </div>
             <p className="font-space font-bold text-2xl text-[#18181B] tabular-nums">
               ₹{grossSales.toLocaleString('en-IN')}
@@ -62,7 +62,7 @@ export const OwnerDashboard: React.FC = () => {
           <div className="bg-white border border-[#E5E4DF] rounded-xl p-5 space-y-2">
             <div className="flex justify-between items-center text-[#64748B] text-xs font-medium">
               <span>Total Orders</span>
-              <ShoppingBag size={16} className="text-[#1D4ED8]" />
+              <ShoppingBag size={16} className="text-[#4D7C0F]" />
             </div>
             <p className="font-space font-bold text-2xl text-[#18181B] tabular-nums">{totalOrders}</p>
             <p className="text-xs text-[#B45309] font-mono font-medium tabular-nums">
@@ -73,7 +73,7 @@ export const OwnerDashboard: React.FC = () => {
           <div className="bg-white border border-[#E5E4DF] rounded-xl p-5 space-y-2">
             <div className="flex justify-between items-center text-[#64748B] text-xs font-medium">
               <span>Published Catalog</span>
-              <Package size={16} className="text-[#1D4ED8]" />
+              <Package size={16} className="text-[#4D7C0F]" />
             </div>
             <p className="font-space font-bold text-2xl text-[#18181B] tabular-nums">
               {products.filter((p) => p.status === 'published').length} / {products.length}
@@ -106,7 +106,7 @@ export const OwnerDashboard: React.FC = () => {
             </h2>
             <Link
               to="/owner/orders"
-              className="text-xs font-semibold text-[#1D4ED8] hover:text-[#1E40AF] transition-colors whitespace-nowrap"
+              className="text-xs font-semibold text-[#4D7C0F] hover:text-[#3F6212] transition-colors whitespace-nowrap"
             >
               Manage All Orders →
             </Link>
@@ -169,7 +169,7 @@ export const OwnerDashboard: React.FC = () => {
                               : ord.status === 'cancelled'
                               ? 'text-[#DC2626]'
                               : ord.status === 'shipped'
-                              ? 'text-[#1D4ED8]'
+                              ? 'text-[#4D7C0F]'
                               : 'text-[#B45309]'
                           }`}
                         >
@@ -179,7 +179,7 @@ export const OwnerDashboard: React.FC = () => {
                       <td className="py-3 px-4 text-right">
                         <Link
                           to="/owner/orders"
-                          className="inline-block px-3 py-1.5 bg-[#FAF9F6] hover:bg-[#EEF2FF] text-[#18181B] hover:text-[#1D4ED8] border border-[#E5E4DF] rounded-md font-medium transition-colors whitespace-nowrap"
+                          className="inline-block px-3 py-1.5 bg-[#FAF9F6] hover:bg-[#F4FBE1] text-[#18181B] hover:text-[#3F6212] border border-[#E5E4DF] hover:border-[#BEF264] rounded-md font-medium transition-colors whitespace-nowrap"
                         >
                           Manage
                         </Link>

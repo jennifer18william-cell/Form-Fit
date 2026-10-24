@@ -66,7 +66,7 @@ export const CartPage: React.FC = () => {
         </p>
         <Link
           to="/shop"
-          className="inline-block px-7 py-3 bg-[#1D4ED8] text-white font-space font-semibold text-xs rounded-md hover:bg-[#1E40AF] transition-colors"
+          className="inline-block px-7 py-3 bg-[#B8F130] text-[#111111] font-space font-bold text-xs rounded-md hover:bg-[#AAE422] transition-colors"
         >
           Browse Collection Catalog
         </Link>
@@ -129,7 +129,7 @@ export const CartPage: React.FC = () => {
                       {item.variant.color && <span>Color: {item.variant.color}</span>}
                     </div>
                     {item.custom_design_data && (
-                      <span className="inline-block text-[#1D4ED8] text-xs font-medium">
+                      <span className="inline-block text-[#4D7C0F] text-xs font-semibold">
                         Custom Studio Print
                       </span>
                     )}
@@ -189,10 +189,10 @@ export const CartPage: React.FC = () => {
           {/* Promo Code Input */}
           <div className="space-y-2">
             <label className="block text-xs font-medium flex items-center gap-1.5 text-[#52525B]">
-              <Tag size={13} className="text-[#1D4ED8]" /> Promo Code or Coupon
+              <Tag size={13} className="text-[#4D7C0F]" /> Promo Code or Coupon
             </label>
             {appliedCoupon ? (
-              <div className="flex justify-between items-center bg-[#EEF2FF] border border-[#C7D2FE] text-[#1E3A8A] p-2.5 rounded-md text-xs font-semibold">
+              <div className="flex justify-between items-center bg-[#F4FBE1] border border-[#BEF264] text-[#3F6212] p-2.5 rounded-md text-xs font-semibold">
                 <span>Code {appliedCoupon.code} Applied</span>
                 <button
                   type="button"
@@ -209,11 +209,11 @@ export const CartPage: React.FC = () => {
                   placeholder="e.g. FORM10"
                   value={couponInput}
                   onChange={(e) => setCouponInput(e.target.value)}
-                  className="flex-1 bg-[#FAF9F6] border border-[#D6D5CE] text-[#18181B] rounded-md px-3 py-2 text-xs focus:outline-none focus:border-[#1D4ED8] uppercase"
+                  className="flex-1 bg-[#FAF9F6] border border-[#D6D5CE] text-[#18181B] rounded-md px-3 py-2 text-xs focus:outline-none focus:border-[#65A30D] uppercase"
                 />
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-[#1D4ED8] text-white font-space text-xs font-semibold rounded-md hover:bg-[#1E40AF] transition-colors cursor-pointer"
+                  className="px-4 py-2 bg-[#B8F130] text-[#111111] font-space text-xs font-bold rounded-md hover:bg-[#AAE422] transition-colors cursor-pointer"
                 >
                   Apply
                 </button>
@@ -259,7 +259,7 @@ export const CartPage: React.FC = () => {
 
             <div className="flex justify-between items-baseline text-base font-bold text-[#18181B] pt-3 border-t border-[#E5E4DF]">
               <span>Total Payable</span>
-              <span className="text-2xl text-[#1D4ED8] font-space font-bold">
+              <span className="text-2xl text-[#111111] font-space font-bold">
                 ₹{finalTotal.toLocaleString('en-IN')}
               </span>
             </div>
@@ -268,7 +268,7 @@ export const CartPage: React.FC = () => {
           <button
             type="button"
             onClick={() => navigate('/checkout')}
-            className="w-full py-3.5 bg-[#1D4ED8] text-white font-space font-semibold text-sm rounded-lg hover:bg-[#1E40AF] transition-colors flex items-center justify-center gap-2 cursor-pointer"
+            className="w-full py-3.5 bg-[#B8F130] text-[#111111] font-space font-bold text-sm rounded-lg hover:bg-[#AAE422] transition-colors flex items-center justify-center gap-2 cursor-pointer"
           >
             Proceed to Checkout <ArrowRight size={16} />
           </button>

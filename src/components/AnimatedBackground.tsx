@@ -19,7 +19,7 @@ export const AnimatedBackground: React.FC = () => {
           repeat: Infinity,
           ease: 'easeInOut',
         }}
-        className="absolute -top-32 -right-32 w-[520px] h-[520px] sm:w-[720px] sm:h-[720px] rounded-full bg-radial from-[#EEF2FF] via-[#EEF2FF]/40 to-transparent blur-[110px]"
+        className="absolute -top-32 -right-32 w-[520px] h-[520px] sm:w-[720px] sm:h-[720px] rounded-full bg-radial from-[#FBF2E6] via-[#F3E3CF]/45 to-transparent blur-[110px]"
       />
 
       {/* Warm Linen Ambient Wash (Bottom Left) */}
@@ -35,7 +35,7 @@ export const AnimatedBackground: React.FC = () => {
           ease: 'easeInOut',
           delay: 2,
         }}
-        className="absolute -bottom-40 -left-40 w-[560px] h-[560px] sm:w-[760px] sm:h-[760px] rounded-full bg-radial from-[#F3F2EE] via-[#E0E7FF]/30 to-transparent blur-[120px]"
+        className="absolute -bottom-40 -left-40 w-[560px] h-[560px] sm:w-[760px] sm:h-[760px] rounded-full bg-radial from-[#F3F2EE] via-[#F4FBE1]/40 to-transparent blur-[120px]"
       />
 
       {/* Subtle Architectural Dot Texture */}

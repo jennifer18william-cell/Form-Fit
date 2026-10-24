@@ -70,7 +70,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose }) => {
         {/* Header */}
         <div className="p-4 sm:p-5 border-b border-[#E5E4DF] flex items-center justify-between bg-[#FAF9F6]">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-[#EEF2FF] text-[#1D4ED8] flex items-center justify-center">
+            <div className="w-9 h-9 rounded-lg bg-[#F4FBE1] border border-[#BEF264] text-[#3F6212] flex items-center justify-center">
               <ShoppingBag size={18} />
             </div>
             <div>
@@ -93,19 +93,19 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose }) => {
         </div>
 
         {/* Free Shipping Progress Indicator */}
-        <div className="bg-[#F8FAFC] border-b border-[#E5E4DF] px-4 py-3 text-xs">
+        <div className="bg-[#FAF9F6] border-b border-[#E5E4DF] px-4 py-3 text-xs">
           {remainingForFreeShipping > 0 ? (
             <p className="mb-2 text-center text-xs text-[#52525B]">
-              Add <span className="font-semibold text-[#1D4ED8] font-mono">₹{remainingForFreeShipping.toLocaleString('en-IN')}</span> more for <span className="text-[#18181B] font-semibold">Free Express Delivery</span>
+              Add <span className="font-semibold text-[#4D7C0F] font-mono">₹{remainingForFreeShipping.toLocaleString('en-IN')}</span> more for <span className="text-[#18181B] font-semibold">Free Express Delivery</span>
             </p>
           ) : (
             <p className="mb-2 text-center text-[#15803D] font-semibold text-xs flex items-center justify-center gap-1.5">
               <CheckCircle2 size={14} className="text-[#16A34A]" /> Free Express Courier Shipping Unlocked
             </p>
           )}
-          <div className="w-full bg-[#E2E8F0] h-1.5 rounded-full overflow-hidden">
+          <div className="w-full bg-[#E5E4DF] h-1.5 rounded-full overflow-hidden">
             <div
-              className="bg-[#1D4ED8] h-full transition-all duration-300 rounded-full"
+              className="bg-[#84CC16] h-full transition-all duration-300 rounded-full"
               style={{ width: `${freeShippingProgress}%` }}
             />
           </div>
@@ -127,7 +127,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose }) => {
               <button
                 type="button"
                 onClick={onClose}
-                className="mt-2 px-6 py-2.5 bg-[#1D4ED8] text-white font-space font-semibold text-xs rounded-md hover:bg-[#1E40AF] transition-colors cursor-pointer touch-manipulation active:scale-95"
+                className="mt-2 px-6 py-2.5 bg-[#B8F130] text-[#111111] font-space font-bold text-xs rounded-md hover:bg-[#AAE422] transition-colors cursor-pointer touch-manipulation active:scale-95"
               >
                 Shop New Arrivals
               </button>
@@ -161,7 +161,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose }) => {
                       }}
                     />
                     {item.custom_design_data && (
-                      <span className="absolute top-1 left-1 bg-[#1D4ED8] text-white text-[9px] font-space font-semibold px-1.5 py-0.5 rounded">
+                      <span className="absolute top-1 left-1 bg-[#B8F130] text-[#111111] text-[9px] font-space font-bold px-1.5 py-0.5 rounded">
                         Custom
                       </span>
                     )}
@@ -243,7 +243,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose }) => {
               <Link
                 to="/checkout"
                 onClick={onClose}
-                className="w-full flex items-center justify-center gap-2 py-3 bg-[#1D4ED8] text-white font-space font-semibold text-xs rounded-md hover:bg-[#1E40AF] transition-colors cursor-pointer touch-manipulation"
+                className="w-full flex items-center justify-center gap-2 py-3 bg-[#B8F130] text-[#111111] font-space font-bold text-xs rounded-md hover:bg-[#AAE422] transition-colors cursor-pointer touch-manipulation"
               >
                 Proceed to Checkout <ArrowRight size={16} />
               </Link>

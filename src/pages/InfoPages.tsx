@@ -5,7 +5,7 @@ import { Mail, Phone, MapPin, CheckCircle2 } from 'lucide-react';
 export const AboutPage: React.FC = () => (
   <div className="max-w-4xl mx-auto px-4 py-12 space-y-8 font-sans text-[#18181B]">
     <div className="border-b border-[#E5E4DF] pb-4">
-      <span className="text-xs font-space font-semibold uppercase tracking-wider text-[#1D4ED8]">
+      <span className="text-xs font-space font-semibold uppercase tracking-wider text-[#4D7C0F]">
         Brand Heritage
       </span>
       <h1 className="font-space font-bold text-3xl tracking-tight text-[#18181B] mt-0.5">
@@ -54,7 +54,7 @@ export const ContactPage: React.FC = () => {
   return (
     <div className="max-w-4xl mx-auto px-4 py-12 space-y-8 font-sans text-[#18181B]">
       <div className="border-b border-[#E5E4DF] pb-4">
-        <span className="text-xs font-space font-semibold uppercase tracking-wider text-[#1D4ED8]">
+        <span className="text-xs font-space font-semibold uppercase tracking-wider text-[#4D7C0F]">
           Customer Support
         </span>
         <h1 className="font-space font-bold text-3xl tracking-tight text-[#18181B] mt-0.5">
@@ -72,13 +72,13 @@ export const ContactPage: React.FC = () => {
           </p>
           <div className="space-y-2.5 pt-2 text-[#18181B]">
             <p className="flex items-center gap-2 font-medium">
-              <Mail size={14} className="text-[#1D4ED8]" /> {storeSettings.contact_email}
+              <Mail size={14} className="text-[#4D7C0F]" /> {storeSettings.contact_email}
             </p>
             <p className="flex items-center gap-2 font-medium">
-              <Phone size={14} className="text-[#1D4ED8]" /> {storeSettings.contact_phone}
+              <Phone size={14} className="text-[#4D7C0F]" /> {storeSettings.contact_phone}
             </p>
             <p className="flex items-center gap-2 text-[#64748B]">
-              <MapPin size={14} className="text-[#1D4ED8]" /> Mumbai, India
+              <MapPin size={14} className="text-[#4D7C0F]" /> Mumbai, India
             </p>
           </div>
         </div>
@@ -95,7 +95,7 @@ export const ContactPage: React.FC = () => {
               </p>
               <button
                 onClick={() => setSubmitted(false)}
-                className="text-xs font-space font-semibold text-[#1D4ED8] underline cursor-pointer"
+                className="text-xs font-space font-semibold text-[#4D7C0F] underline cursor-pointer"
               >
                 Send another message
               </button>
@@ -108,7 +108,7 @@ export const ContactPage: React.FC = () => {
                 placeholder="Your Full Name *"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="w-full bg-[#FAF9F6] border border-[#D6D5CE] rounded-md p-2.5 focus:outline-none focus:border-[#1D4ED8]"
+                className="w-full bg-[#FAF9F6] border border-[#D6D5CE] rounded-md p-2.5 focus:outline-none focus:border-[#65A30D]"
               />
               <input
                 type="email"
@@ -116,14 +116,14 @@ export const ContactPage: React.FC = () => {
                 placeholder="Your Email Address *"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full bg-[#FAF9F6] border border-[#D6D5CE] rounded-md p-2.5 focus:outline-none focus:border-[#1D4ED8]"
+                className="w-full bg-[#FAF9F6] border border-[#D6D5CE] rounded-md p-2.5 focus:outline-none focus:border-[#65A30D]"
               />
               <input
                 type="text"
                 placeholder="Order Number / Subject"
                 value={subject}
                 onChange={(e) => setSubject(e.target.value)}
-                className="w-full bg-[#FAF9F6] border border-[#D6D5CE] rounded-md p-2.5 focus:outline-none focus:border-[#1D4ED8]"
+                className="w-full bg-[#FAF9F6] border border-[#D6D5CE] rounded-md p-2.5 focus:outline-none focus:border-[#65A30D]"
               />
               <textarea
                 required
@@ -131,11 +131,11 @@ export const ContactPage: React.FC = () => {
                 placeholder="How can we assist you today? *"
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
-                className="w-full bg-[#FAF9F6] border border-[#D6D5CE] rounded-md p-2.5 focus:outline-none focus:border-[#1D4ED8]"
+                className="w-full bg-[#FAF9F6] border border-[#D6D5CE] rounded-md p-2.5 focus:outline-none focus:border-[#65A30D]"
               />
               <button
                 type="submit"
-                className="w-full py-3 bg-[#1D4ED8] text-white font-space font-semibold text-xs rounded-md hover:bg-[#1E40AF] transition-colors cursor-pointer"
+                className="w-full py-3 bg-[#B8F130] text-[#111111] font-space font-bold text-xs rounded-md hover:bg-[#AAE422] transition-colors cursor-pointer"
               >
                 Send Support Message
               </button>
@@ -150,7 +150,7 @@ export const ContactPage: React.FC = () => {
 export const SizeGuidePage: React.FC = () => (
   <div className="max-w-4xl mx-auto px-4 py-12 space-y-8 font-sans text-[#18181B]">
     <div className="border-b border-[#E5E4DF] pb-4">
-      <span className="text-xs font-space font-semibold uppercase tracking-wider text-[#1D4ED8]">
+      <span className="text-xs font-space font-semibold uppercase tracking-wider text-[#4D7C0F]">
         Sizing Reference
       </span>
       <h1 className="font-space font-bold text-3xl tracking-tight text-[#18181B] mt-0.5">
@@ -215,7 +215,7 @@ export const PolicyPage: React.FC<{ title: string; subtitle: string; content: st
 }) => (
   <div className="max-w-4xl mx-auto px-4 py-12 space-y-8 font-sans text-[#18181B]">
     <div className="border-b border-[#E5E4DF] pb-4">
-      <span className="text-xs font-space font-semibold uppercase tracking-wider text-[#1D4ED8]">
+      <span className="text-xs font-space font-semibold uppercase tracking-wider text-[#4D7C0F]">
         {subtitle}
       </span>
       <h1 className="font-space font-bold text-3xl tracking-tight text-[#18181B] mt-0.5">

@@ -45,7 +45,7 @@ export const ProductDetail: React.FC = () => {
         </p>
         <Link
           to="/shop"
-          className="inline-block px-6 py-2.5 bg-[#1D4ED8] text-white font-space font-semibold text-xs rounded-md hover:bg-[#1E40AF] transition-colors"
+          className="inline-block px-6 py-2.5 bg-[#B8F130] text-[#111111] font-space font-bold text-xs rounded-md hover:bg-[#AAE422] transition-colors"
         >
           Return to Shop Catalog
         </Link>
@@ -107,11 +107,11 @@ export const ProductDetail: React.FC = () => {
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-16 text-[#18181B]">
       {/* Breadcrumb */}
       <div className="text-xs font-medium text-[#64748B] flex items-center gap-2">
-        <Link to="/" className="hover:text-[#1D4ED8] transition-colors">
+        <Link to="/" className="hover:text-[#4D7C0F] transition-colors">
           Home
         </Link>
         <span aria-hidden="true">/</span>
-        <Link to="/shop" className="hover:text-[#1D4ED8] transition-colors">
+        <Link to="/shop" className="hover:text-[#4D7C0F] transition-colors">
           Shop
         </Link>
         <span aria-hidden="true">/</span>
@@ -133,7 +133,7 @@ export const ProductDetail: React.FC = () => {
             />
 
             {isSale && (
-              <span className="absolute top-4 left-4 bg-[#EEF2FF]/95 text-[#1D4ED8] font-space font-semibold text-xs px-3 py-1 rounded border border-[#C7D2FE]">
+              <span className="absolute top-4 left-4 bg-[#B8F130]/95 text-[#111111] font-space font-bold text-xs px-3 py-1 rounded border border-[#9ED912]">
                 Sale
               </span>
             )}
@@ -147,7 +147,7 @@ export const ProductDetail: React.FC = () => {
                   onClick={() => setSelectedImageIndex(idx)}
                   className={`w-20 aspect-[3/4] bg-[#F3F2EE] border rounded-lg shrink-0 overflow-hidden cursor-pointer transition-all ${
                     selectedImageIndex === idx
-                      ? 'border-2 border-[#1D4ED8]'
+                      ? 'border-2 border-[#65A30D]'
                       : 'border-[#E5E4DF] opacity-75 hover:opacity-100'
                   }`}
                 >
@@ -169,7 +169,7 @@ export const ProductDetail: React.FC = () => {
         {/* Right Contiguous Purchase Module */}
         <div className="bg-white border border-[#E5E4DF] rounded-2xl p-6 sm:p-8 space-y-6">
           <div className="space-y-2 border-b border-[#E5E4DF] pb-6">
-            <span className="text-xs font-space font-semibold uppercase tracking-wider text-[#1D4ED8]">
+            <span className="text-xs font-space font-semibold uppercase tracking-wider text-[#4D7C0F]">
               {product.category?.name || product.gender_collection}
             </span>
             <h1 className="font-space font-bold text-3xl sm:text-4xl tracking-tight text-[#18181B]">
@@ -216,8 +216,8 @@ export const ProductDetail: React.FC = () => {
                         onClick={() => matchingVariant && setSelectedVariant(matchingVariant)}
                         className={`px-3.5 py-2 text-xs font-medium border rounded-md cursor-pointer transition-colors ${
                           isSelected
-                            ? 'bg-[#1D4ED8] text-white border-[#1D4ED8] font-semibold'
-                            : 'bg-[#FAF9F6] text-[#18181B] border-[#D6D5CE] hover:border-[#1D4ED8]'
+                            ? 'bg-[#B8F130] text-[#111111] border-[#9ED912] font-bold'
+                            : 'bg-[#FAF9F6] text-[#18181B] border-[#D6D5CE] hover:border-[#65A30D]'
                         }`}
                       >
                         {color}
@@ -239,7 +239,7 @@ export const ProductDetail: React.FC = () => {
                   </label>
                   <Link
                     to="/size-guide"
-                    className="flex items-center gap-1 text-[#1D4ED8] hover:underline font-medium"
+                    className="flex items-center gap-1 text-[#4D7C0F] hover:underline font-medium"
                   >
                     <Ruler size={13} /> Size Guide
                   </Link>
@@ -262,9 +262,9 @@ export const ProductDetail: React.FC = () => {
                         onClick={() => matchingVariant && setSelectedVariant(matchingVariant)}
                         className={`py-2.5 text-xs font-mono border rounded-md transition-colors cursor-pointer font-semibold ${
                           isSelected
-                            ? 'bg-[#1D4ED8] text-white border-[#1D4ED8]'
+                            ? 'bg-[#B8F130] text-[#111111] border-[#9ED912]'
                             : isAvailable
-                            ? 'bg-[#FAF9F6] text-[#18181B] border-[#D6D5CE] hover:border-[#1D4ED8]'
+                            ? 'bg-[#FAF9F6] text-[#18181B] border-[#D6D5CE] hover:border-[#65A30D]'
                             : 'bg-[#F3F2EE] text-[#A1A1AA] border-[#E5E4DF] cursor-not-allowed line-through'
                         }`}
                       >
@@ -319,7 +319,7 @@ export const ProductDetail: React.FC = () => {
                 <button
                   disabled={isOutOfStock || !selectedVariant}
                   onClick={handleAddToCart}
-                  className="flex-1 py-3.5 bg-[#1D4ED8] text-white font-space font-semibold text-sm rounded-lg hover:bg-[#1E40AF] transition-colors disabled:bg-[#E5E4DF] disabled:text-[#94A3B8] disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer whitespace-nowrap"
+                  className="flex-1 py-3.5 bg-[#B8F130] text-[#111111] font-space font-bold text-sm rounded-lg hover:bg-[#AAE422] transition-colors disabled:bg-[#E5E4DF] disabled:text-[#94A3B8] disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer whitespace-nowrap"
                 >
                   <ShoppingBag size={17} /> Add to Bag
                 </button>
@@ -327,14 +327,14 @@ export const ProductDetail: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => toggleWishlist(product)}
-                  className="p-3.5 border border-[#D6D5CE] bg-[#FAF9F6] text-[#3F3F46] hover:border-[#1D4ED8] hover:text-[#1D4ED8] rounded-lg transition-colors cursor-pointer"
+                  className="p-3.5 border border-[#D6D5CE] bg-[#FAF9F6] text-[#3F3F46] hover:border-[#65A30D] hover:text-[#4D7C0F] rounded-lg transition-colors cursor-pointer"
                   title="Save to Wishlist"
                   aria-label="Save to Wishlist"
                 >
                   <Heart
                     size={18}
-                    fill={inWishlist ? '#1D4ED8' : 'none'}
-                    className={inWishlist ? 'text-[#1D4ED8]' : ''}
+                    fill={inWishlist ? '#B8F130' : 'none'}
+                    className={inWishlist ? 'text-[#3F6212]' : ''}
                   />
                 </button>
               </div>
@@ -343,7 +343,7 @@ export const ProductDetail: React.FC = () => {
                 <button
                   type="button"
                   onClick={handleBuyNow}
-                  className="w-full py-3.5 bg-[#FAF9F6] border border-[#D6D5CE] text-[#18181B] font-space font-semibold text-sm rounded-lg hover:border-[#1D4ED8] hover:text-[#1D4ED8] transition-colors cursor-pointer"
+                  className="w-full py-3.5 bg-[#111111] border border-[#111111] text-white font-space font-semibold text-sm rounded-lg hover:bg-[#27272A] transition-colors cursor-pointer"
                 >
                   Buy It Now
                 </button>
@@ -354,15 +354,15 @@ export const ProductDetail: React.FC = () => {
           {/* Value Guarantees */}
           <div className="grid grid-cols-3 gap-2.5 pt-4 border-t border-[#E5E4DF] text-center text-xs">
             <div className="p-3 bg-[#FAF9F6] border border-[#E5E4DF] rounded-lg">
-              <Truck size={17} className="mx-auto mb-1 text-[#1D4ED8]" />
+              <Truck size={17} className="mx-auto mb-1 text-[#4D7C0F]" />
               <span className="text-[#18181B] font-medium block">Fast Shipping</span>
             </div>
             <div className="p-3 bg-[#FAF9F6] border border-[#E5E4DF] rounded-lg">
-              <RotateCcw size={17} className="mx-auto mb-1 text-[#1D4ED8]" />
+              <RotateCcw size={17} className="mx-auto mb-1 text-[#4D7C0F]" />
               <span className="text-[#18181B] font-medium block">7-Day Return</span>
             </div>
             <div className="p-3 bg-[#FAF9F6] border border-[#E5E4DF] rounded-lg">
-              <Shield size={17} className="mx-auto mb-1 text-[#1D4ED8]" />
+              <Shield size={17} className="mx-auto mb-1 text-[#4D7C0F]" />
               <span className="text-[#18181B] font-medium block">Verified Quality</span>
             </div>
           </div>
@@ -375,7 +375,7 @@ export const ProductDetail: React.FC = () => {
                 onClick={() => setActiveTab('details')}
                 className={`pb-2.5 px-3 font-space font-semibold text-xs border-b-2 cursor-pointer transition-colors whitespace-nowrap ${
                   activeTab === 'details'
-                    ? 'border-[#1D4ED8] text-[#1D4ED8]'
+                    ? 'border-[#65A30D] text-[#18181B]'
                     : 'border-transparent text-[#64748B] hover:text-[#18181B]'
                 }`}
               >
@@ -386,7 +386,7 @@ export const ProductDetail: React.FC = () => {
                 onClick={() => setActiveTab('care')}
                 className={`pb-2.5 px-3 font-space font-semibold text-xs border-b-2 cursor-pointer transition-colors whitespace-nowrap ${
                   activeTab === 'care'
-                    ? 'border-[#1D4ED8] text-[#1D4ED8]'
+                    ? 'border-[#65A30D] text-[#18181B]'
                     : 'border-transparent text-[#64748B] hover:text-[#18181B]'
                 }`}
               >
@@ -397,7 +397,7 @@ export const ProductDetail: React.FC = () => {
                 onClick={() => setActiveTab('shipping')}
                 className={`pb-2.5 px-3 font-space font-semibold text-xs border-b-2 cursor-pointer transition-colors whitespace-nowrap ${
                   activeTab === 'shipping'
-                    ? 'border-[#1D4ED8] text-[#1D4ED8]'
+                    ? 'border-[#65A30D] text-[#18181B]'
                     : 'border-transparent text-[#64748B] hover:text-[#18181B]'
                 }`}
               >
@@ -454,7 +454,7 @@ export const ProductDetail: React.FC = () => {
           <button
             type="button"
             onClick={() => setShowReviewModal(true)}
-            className="px-5 py-2.5 bg-[#1D4ED8] text-white font-space font-semibold text-xs rounded-md hover:bg-[#1E40AF] transition-colors cursor-pointer whitespace-nowrap"
+            className="px-5 py-2.5 bg-[#B8F130] text-[#111111] font-space font-bold text-xs rounded-md hover:bg-[#AAE422] transition-colors cursor-pointer whitespace-nowrap"
           >
             Write a Review
           </button>
@@ -477,7 +477,7 @@ export const ProductDetail: React.FC = () => {
                   placeholder="Your Full Name"
                   value={reviewerName}
                   onChange={(e) => setReviewerName(e.target.value)}
-                  className="w-full bg-white border border-[#D6D5CE] text-[#18181B] rounded-md p-2.5 text-xs focus:outline-none focus:border-[#1D4ED8]"
+                  className="w-full bg-white border border-[#D6D5CE] text-[#18181B] rounded-md p-2.5 text-xs focus:outline-none focus:border-[#65A30D]"
                 />
               </div>
               <div className="space-y-1">
@@ -485,7 +485,7 @@ export const ProductDetail: React.FC = () => {
                 <select
                   value={reviewRating}
                   onChange={(e) => setReviewRating(Number(e.target.value))}
-                  className="w-full bg-white border border-[#D6D5CE] text-[#18181B] rounded-md p-2.5 text-xs focus:outline-none focus:border-[#1D4ED8]"
+                  className="w-full bg-white border border-[#D6D5CE] text-[#18181B] rounded-md p-2.5 text-xs focus:outline-none focus:border-[#65A30D]"
                 >
                   <option value={5}>5 / 5 — Excellent</option>
                   <option value={4}>4 / 5 — Very Good</option>
@@ -503,7 +503,7 @@ export const ProductDetail: React.FC = () => {
                 placeholder="Share your feedback on fabric weight, sizing accuracy, and comfort..."
                 value={reviewComment}
                 onChange={(e) => setReviewComment(e.target.value)}
-                className="w-full bg-white border border-[#D6D5CE] text-[#18181B] rounded-md p-2.5 text-xs focus:outline-none focus:border-[#1D4ED8]"
+                className="w-full bg-white border border-[#D6D5CE] text-[#18181B] rounded-md p-2.5 text-xs focus:outline-none focus:border-[#65A30D]"
               />
             </div>
             <div className="flex justify-end gap-2 pt-2">
@@ -516,7 +516,7 @@ export const ProductDetail: React.FC = () => {
               </button>
               <button
                 type="submit"
-                className="px-5 py-2 bg-[#1D4ED8] text-white text-xs font-space font-semibold rounded-md hover:bg-[#1E40AF] transition-colors cursor-pointer"
+                className="px-5 py-2 bg-[#B8F130] text-[#111111] text-xs font-space font-bold rounded-md hover:bg-[#AAE422] transition-colors cursor-pointer"
               >
                 Post Review
               </button>

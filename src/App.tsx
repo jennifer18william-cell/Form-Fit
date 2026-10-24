@@ -42,7 +42,7 @@ const OwnerRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 
 // Customer Layout wrapper in clean light theme
 const CustomerLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <div className="min-h-screen bg-[#FAF9F6] text-[#18181B] font-sans flex flex-col relative overflow-x-hidden selection:bg-[#DBEAFE] selection:text-[#1E3A8A] pb-16 md:pb-0">
+  <div className="min-h-screen bg-[#FAF9F6] text-[#18181B] font-sans flex flex-col relative overflow-x-hidden selection:bg-[#B8F130] selection:text-[#111111] pb-16 md:pb-0">
     <AnimatedBackground />
     <div className="relative z-10 flex flex-col min-h-screen">
       <Navbar />

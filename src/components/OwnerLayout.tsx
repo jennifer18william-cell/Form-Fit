@@ -50,7 +50,7 @@ export const OwnerLayout: React.FC<{ children: React.ReactNode }> = ({ children 
     .filter((v) => v.stock_quantity <= 5).length;
 
   return (
-    <div className="min-h-screen bg-[#FAF9F6] text-[#18181B] font-sans flex flex-col selection:bg-[#DBEAFE] selection:text-[#1E3A8A]">
+    <div className="min-h-screen bg-[#FAF9F6] text-[#18181B] font-sans flex flex-col selection:bg-[#B8F130] selection:text-[#111111]">
       {/* Supabase / Storage status strip */}
       <SupabaseBanner />
 
@@ -62,7 +62,7 @@ export const OwnerLayout: React.FC<{ children: React.ReactNode }> = ({ children 
               {/* Mobile Sidebar Toggle */}
               <button
                 onClick={() => setIsMobileSidebarOpen(!isMobileSidebarOpen)}
-                className="lg:hidden p-2 text-[#18181B] hover:text-[#1D4ED8] hover:bg-[#FAF9F6] rounded-lg transition-colors cursor-pointer"
+                className="lg:hidden p-2 text-[#18181B] hover:text-[#4D7C0F] hover:bg-[#FAF9F6] rounded-lg transition-colors cursor-pointer"
                 aria-label="Toggle navigation"
               >
                 {isMobileSidebarOpen ? <X size={20} /> : <Menu size={20} />}
@@ -72,7 +72,7 @@ export const OwnerLayout: React.FC<{ children: React.ReactNode }> = ({ children 
                 to="/owner/dashboard"
                 className="flex items-center gap-2 font-space font-bold text-base sm:text-lg tracking-tight text-[#18181B] whitespace-nowrap shrink-0"
               >
-                <ShieldCheck size={20} className="text-[#1D4ED8]" />
+                <ShieldCheck size={20} className="text-[#4D7C0F]" />
                 <span>Form &amp; Fit Admin</span>
               </Link>
             </div>
@@ -101,7 +101,7 @@ export const OwnerLayout: React.FC<{ children: React.ReactNode }> = ({ children 
 
               <Link
                 to="/owner/products/new"
-                className="px-3.5 py-2 bg-[#1D4ED8] hover:bg-[#1E40AF] text-white rounded-lg font-space font-semibold text-xs flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap shrink-0"
+                className="px-3.5 py-2 bg-[#B8F130] hover:bg-[#AAE422] text-[#111111] rounded-lg font-space font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap shrink-0"
               >
                 <PlusCircle size={14} /> New Product
               </Link>
@@ -137,7 +137,7 @@ export const OwnerLayout: React.FC<{ children: React.ReactNode }> = ({ children 
           <div className="bg-white border border-[#E5E4DF] rounded-xl p-4 space-y-3">
             <div className="px-2 pb-2 border-b border-[#E5E4DF] text-[#64748B] font-space font-semibold text-xs flex items-center justify-between">
               <span>Store Management</span>
-              <ShieldCheck size={14} className="text-[#1D4ED8]" />
+              <ShieldCheck size={14} className="text-[#4D7C0F]" />
             </div>
 
             <nav className="space-y-1 text-sm">
@@ -152,7 +152,7 @@ export const OwnerLayout: React.FC<{ children: React.ReactNode }> = ({ children 
                     to={link.path}
                     className={`flex items-center justify-between px-3 py-2.5 rounded-lg transition-colors whitespace-nowrap ${
                       isActive
-                        ? 'bg-[#EEF2FF] text-[#1D4ED8] font-semibold'
+                        ? 'bg-[#F4FBE1] text-[#3F6212] border border-[#BEF264] font-semibold'
                         : 'text-[#52525B] hover:text-[#18181B] hover:bg-[#FAF9F6] font-medium'
                     }`}
                   >
@@ -163,7 +163,7 @@ export const OwnerLayout: React.FC<{ children: React.ReactNode }> = ({ children 
                     {link.badge !== undefined && link.badge > 0 && (
                       <span
                         className={`font-mono text-xs tabular-nums shrink-0 ${
-                          isActive ? 'text-[#1D4ED8] font-bold' : 'text-[#64748B]'
+                          isActive ? 'text-[#3F6212] font-bold' : 'text-[#64748B]'
                         }`}
                       >
                         {link.badge}
@@ -183,7 +183,7 @@ export const OwnerLayout: React.FC<{ children: React.ReactNode }> = ({ children 
             </p>
             <Link
               to="/"
-              className="inline-flex items-center gap-1 pt-1 text-xs font-semibold text-[#1D4ED8] hover:text-[#1E40AF] transition-colors"
+              className="inline-flex items-center gap-1 pt-1 text-xs font-semibold text-[#4D7C0F] hover:text-[#3F6212] transition-colors"
             >
               Open Customer Storefront →
             </Link>
@@ -203,7 +203,7 @@ export const OwnerLayout: React.FC<{ children: React.ReactNode }> = ({ children 
                   onClick={() => setIsMobileSidebarOpen(false)}
                   className={`flex items-center justify-between px-3 py-2.5 rounded-lg transition-colors ${
                     isActive
-                      ? 'bg-[#EEF2FF] text-[#1D4ED8] font-semibold'
+                      ? 'bg-[#F4FBE1] text-[#3F6212] border border-[#BEF264] font-semibold'
                       : 'text-[#52525B] hover:bg-[#FAF9F6] hover:text-[#18181B] font-medium'
                   }`}
                 >
@@ -218,7 +218,7 @@ export const OwnerLayout: React.FC<{ children: React.ReactNode }> = ({ children 
               <Link
                 to="/"
                 onClick={() => setIsMobileSidebarOpen(false)}
-                className="flex items-center justify-between px-3 py-2.5 rounded-lg text-[#1D4ED8] font-semibold hover:bg-[#EEF2FF]"
+                className="flex items-center justify-between px-3 py-2.5 rounded-lg text-[#3F6212] font-semibold hover:bg-[#F4FBE1]"
               >
                 <span className="flex items-center gap-2">
                   <ExternalLink size={15} /> Open Customer Storefront
