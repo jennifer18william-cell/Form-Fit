@@ -101,6 +101,56 @@ function safeStorageSet(key: string, value: any) {
   }
 }
 
+function ensureFootwearSubcategories(existing: Category[]): Category[] {
+  const result = [...existing];
+  const hasFootwearParent = result.some((c) => c.id === 'cat-9' || c.slug === 'footwear');
+  if (!hasFootwearParent) {
+    const parentDefault = DEFAULT_CATEGORIES.find((c) => c.id === 'cat-9');
+    if (parentDefault) result.push(parentDefault);
+  }
+
+  const parentCat = result.find((c) => c.id === 'cat-9' || c.slug === 'footwear');
+  const parentId = parentCat?.id || 'cat-9';
+
+  const requiredSubcats: Category[] = [
+    {
+      id: 'cat-9-men',
+      name: "Men's Footwear",
+      slug: 'mens-footwear',
+      description: 'Minimalist court sneakers, suede loafers, and boots for men',
+      display_order: 10,
+      parent_id: parentId,
+    },
+    {
+      id: 'cat-9-women',
+      name: "Women's Footwear",
+      slug: 'womens-footwear',
+      description: 'Sculpted leather sneakers, cognac loafers, and everyday flats for women',
+      display_order: 11,
+      parent_id: parentId,
+    },
+  ];
+
+  const parentIndex = result.findIndex((c) => c.id === parentId);
+  let insertOffset = 1;
+
+  for (const sub of requiredSubcats) {
+    const existingIdx = result.findIndex((c) => c.id === sub.id || c.slug === sub.slug);
+    if (existingIdx === -1) {
+      if (parentIndex !== -1) {
+        result.splice(parentIndex + insertOffset, 0, sub);
+        insertOffset++;
+      } else {
+        result.push(sub);
+      }
+    } else if (!result[existingIdx].parent_id) {
+      result[existingIdx] = { ...result[existingIdx], parent_id: parentId };
+    }
+  }
+
+  return result;
+}
+
 export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   // Load local persistent states with automatic product image auto-healing
   const [products, setProducts] = useState<Product[]>(() => {
@@ -137,7 +187,13 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const [categories, setCategories] = useState<Category[]>(() => {
     const saved = localStorage.getItem('form_fit_categories');
-    return saved ? JSON.parse(saved) : DEFAULT_CATEGORIES;
+    if (!saved) return DEFAULT_CATEGORIES;
+    try {
+      const parsed: Category[] = JSON.parse(saved);
+      return ensureFootwearSubcategories(parsed);
+    } catch {
+      return DEFAULT_CATEGORIES;
+    }
   });
 
   const [cart, setCart] = useState<CartItem[]>(() => {
@@ -284,7 +340,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     try {
       const { data, error } = await supabase.from('categories').select('*').order('display_order', { ascending: true });
       if (!error && data && data.length > 0) {
-        setCategories(data as Category[]);
+        setCategories(ensureFootwearSubcategories(data as Category[]));
       }
     } catch (err) {
       console.error('Failed to fetch categories:', err);
@@ -489,6 +545,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       description: categoryData.description || '',
       image_url: categoryData.image_url,
       display_order: categoryData.display_order || categories.length + 1,
+      parent_id: categoryData.parent_id,
     };
 
     setCategories((prev) => {

@@ -1,4 +1,6 @@
 import footwearStudioImg from '../assets/images/footwear_leather_sneakers_studio_1792835303853.jpg';
+import mensFootwearStudioImg from '../assets/images/mens_footwear_studio_poster_1792850976169.jpg';
+import womensFootwearStudioImg from '../assets/images/womens_footwear_studio_poster_1792850976435.jpg';
 import accessoriesStudioImg from '../assets/images/accessories_leather_goods_studio_1792835304388.jpg';
 
 export interface FashionPhoto {
@@ -25,6 +27,22 @@ const CATEGORY_FALLBACK_PHOTOS: Record<string, FashionPhoto[]> = {
       id: 'fw-1',
       url: footwearStudioImg,
       alt: 'Minimalist Leather Court Sneakers Studio Poster',
+      photographer: 'Form & Fit Studio',
+    },
+  ],
+  'mens-footwear': [
+    {
+      id: 'fw-men-1',
+      url: mensFootwearStudioImg,
+      alt: "Men's Suede Loafers & Leather Sneakers Studio Poster",
+      photographer: 'Form & Fit Studio',
+    },
+  ],
+  'womens-footwear': [
+    {
+      id: 'fw-women-1',
+      url: womensFootwearStudioImg,
+      alt: "Women's Sculpted Leather Sneakers & Cognac Loafers Studio Poster",
       photographer: 'Form & Fit Studio',
     },
   ],

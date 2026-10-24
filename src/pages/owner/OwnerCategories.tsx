@@ -8,6 +8,7 @@ export const OwnerCategories: React.FC = () => {
   const { categories, saveCategory, deleteCategory } = useStore();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
+  const [parentId, setParentId] = useState<string>('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
@@ -20,10 +21,12 @@ export const OwnerCategories: React.FC = () => {
       name: name.trim(),
       slug: name.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
       description: description.trim(),
+      parent_id: parentId || undefined,
     });
 
     setName('');
     setDescription('');
+    setParentId('');
     setEditingId(null);
   };
 
@@ -31,6 +34,7 @@ export const OwnerCategories: React.FC = () => {
     setEditingId(cat.id);
     setName(cat.name);
     setDescription(cat.description || '');
+    setParentId(cat.parent_id || '');
   };
 
   return (
@@ -70,6 +74,26 @@ export const OwnerCategories: React.FC = () => {
 
               <div className="space-y-1.5">
                 <label className="block font-semibold text-[#18181B]">
+                  Parent Zone / Category (Optional)
+                </label>
+                <select
+                  value={parentId}
+                  onChange={(e) => setParentId(e.target.value)}
+                  className="w-full bg-[#FAF9F6] border border-[#D6D5CE] rounded-lg px-3 py-2 text-xs text-[#18181B] focus:bg-white focus:border-[#65A30D] focus:ring-2 focus:ring-[#65A30D]/15 focus:outline-none transition-colors cursor-pointer"
+                >
+                  <option value="">None (Top-Level Category)</option>
+                  {categories
+                    .filter((c) => !c.parent_id && c.id !== editingId)
+                    .map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                </select>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="block font-semibold text-[#18181B]">
                   Description
                 </label>
                 <textarea
@@ -89,6 +113,7 @@ export const OwnerCategories: React.FC = () => {
                       setEditingId(null);
                       setName('');
                       setDescription('');
+                      setParentId('');
                     }}
                     className="px-4 py-2.5 bg-[#FAF9F6] hover:bg-[#F3F2EE] border border-[#D6D5CE] rounded-lg text-xs font-medium text-[#52525B] cursor-pointer transition-colors whitespace-nowrap"
                   >
@@ -120,6 +145,11 @@ export const OwnerCategories: React.FC = () => {
                     className="p-4 bg-[#FAF9F6] border border-[#E5E4DF] rounded-xl flex justify-between items-start gap-3"
                   >
                     <div className="min-w-0">
+                      {cat.parent_id && (
+                        <p className="text-[10px] font-space font-bold uppercase tracking-wider text-[#4D7C0F] mb-0.5">
+                          {categories.find((p) => p.id === cat.parent_id)?.name || 'Parent Zone'} Zone
+                        </p>
+                      )}
                       <h3 className="font-space font-semibold text-sm text-[#18181B] truncate">
                         {cat.name}
                       </h3>

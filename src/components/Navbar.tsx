@@ -13,6 +13,7 @@ import {
   ShieldCheck,
   Settings,
   ChevronRight,
+  ChevronDown,
   LogOut,
   Truck,
 } from 'lucide-react';
@@ -25,6 +26,7 @@ export const Navbar: React.FC = () => {
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+  const [isFootwearMenuOpen, setIsFootwearMenuOpen] = useState(false);
 
   const navigate = useNavigate();
   const location = useLocation();
@@ -41,7 +43,8 @@ export const Navbar: React.FC = () => {
   const totalCartCount = cart.reduce((acc, item) => acc + item.quantity, 0);
 
   const isFootwearActive =
-    location.search.includes('category=cat-9') || location.search.includes('gender=Footwear');
+    location.search.includes('category=cat-9') ||
+    location.search.includes('gender=Footwear');
   const isAccessoriesActive =
     location.search.includes('category=cat-10') || location.search.includes('gender=Accessories');
 
@@ -163,16 +166,67 @@ export const Navbar: React.FC = () => {
             >
               UNISEX
             </Link>
-            <Link
-              to="/shop?category=cat-9"
-              className={`hover:text-[#65A30D] transition-colors whitespace-nowrap shrink-0 py-1 border-b-2 ${
-                isFootwearActive
-                  ? 'border-[#9ED912] text-[#111111]'
-                  : 'border-transparent'
-              }`}
+            <div
+              className="relative"
+              onMouseEnter={() => setIsFootwearMenuOpen(true)}
+              onMouseLeave={() => setIsFootwearMenuOpen(false)}
             >
-              FOOTWEAR
-            </Link>
+              <Link
+                to="/shop?category=cat-9"
+                onClick={() => setIsFootwearMenuOpen(false)}
+                className={`hover:text-[#65A30D] transition-colors whitespace-nowrap shrink-0 py-1 border-b-2 inline-flex items-center gap-1 ${
+                  isFootwearActive
+                    ? 'border-[#9ED912] text-[#111111]'
+                    : 'border-transparent'
+                }`}
+              >
+                <span>FOOTWEAR</span>
+                <ChevronDown
+                  size={13}
+                  className={`transition-transform duration-150 ${isFootwearMenuOpen ? 'rotate-180 text-[#65A30D]' : ''}`}
+                />
+              </Link>
+
+              {isFootwearMenuOpen && (
+                <div className="absolute left-0 top-full pt-2 w-56 z-50">
+                  <div className="bg-white border border-[#E5E4DF] rounded-lg shadow-lg py-2 text-xs font-sans normal-case tracking-normal text-[#18181B]">
+                    <div className="px-3.5 py-1.5 text-[10px] font-space font-bold uppercase tracking-wider text-[#65A30D] border-b border-[#F3F2EE]">
+                      Footwear Zone
+                    </div>
+                    <Link
+                      to="/shop?category=cat-9"
+                      onClick={() => setIsFootwearMenuOpen(false)}
+                      className={`flex items-center justify-between px-3.5 py-2.5 hover:bg-[#F4FBE1] transition-colors ${
+                        location.search === '?category=cat-9' ? 'font-semibold text-[#3F6212] bg-[#FAF9F6]' : 'font-medium text-[#18181B]'
+                      }`}
+                    >
+                      <span>All Footwear Zone</span>
+                      <ChevronRight size={13} className="text-[#94A3B8]" />
+                    </Link>
+                    <Link
+                      to="/shop?category=cat-9-men"
+                      onClick={() => setIsFootwearMenuOpen(false)}
+                      className={`flex items-center justify-between px-3.5 py-2.5 hover:bg-[#F4FBE1] transition-colors ${
+                        location.search.includes('category=cat-9-men') ? 'font-semibold text-[#3F6212] bg-[#FAF9F6]' : 'font-medium text-[#18181B]'
+                      }`}
+                    >
+                      <span>Men's Footwear</span>
+                      <ChevronRight size={13} className="text-[#94A3B8]" />
+                    </Link>
+                    <Link
+                      to="/shop?category=cat-9-women"
+                      onClick={() => setIsFootwearMenuOpen(false)}
+                      className={`flex items-center justify-between px-3.5 py-2.5 hover:bg-[#F4FBE1] transition-colors ${
+                        location.search.includes('category=cat-9-women') ? 'font-semibold text-[#3F6212] bg-[#FAF9F6]' : 'font-medium text-[#18181B]'
+                      }`}
+                    >
+                      <span>Women's Footwear</span>
+                      <ChevronRight size={13} className="text-[#94A3B8]" />
+                    </Link>
+                  </div>
+                </div>
+              )}
+            </div>
             <Link
               to="/shop?category=cat-10"
               className={`hover:text-[#65A30D] transition-colors whitespace-nowrap shrink-0 py-1 border-b-2 ${
@@ -381,19 +435,44 @@ export const Navbar: React.FC = () => {
               Unisex
             </Link>
             <Link
-              to="/shop?category=cat-9"
+              to="/shop?category=cat-10"
               onClick={() => setIsMobileMenuOpen(false)}
               className="py-2 px-3 bg-[#FAF9F6] border border-[#E5E4DF] rounded-md hover:border-[#9ED912]"
             >
-              Footwear
-            </Link>
-            <Link
-              to="/shop?category=cat-10"
-              onClick={() => setIsMobileMenuOpen(false)}
-              className="py-2 px-3 bg-[#FAF9F6] border border-[#E5E4DF] rounded-md hover:border-[#9ED912] col-span-2"
-            >
               Accessories
             </Link>
+          </div>
+
+          {/* Dedicated Mobile Footwear Zone Subcategories */}
+          <div className="p-3 bg-[#FAF9F6] border border-[#E5E4DF] rounded-lg space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-space font-bold uppercase tracking-wider text-[#4D7C0F]">
+                Footwear Zone
+              </span>
+              <Link
+                to="/shop?category=cat-9"
+                onClick={() => setIsMobileMenuOpen(false)}
+                className="text-[10px] font-sans font-semibold normal-case tracking-normal text-[#52525B] hover:text-[#111111]"
+              >
+                View All →
+              </Link>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <Link
+                to="/shop?category=cat-9-men"
+                onClick={() => setIsMobileMenuOpen(false)}
+                className="py-2 px-2.5 bg-white border border-[#E5E4DF] rounded-md hover:border-[#9ED912] text-[11px] truncate"
+              >
+                Men's Footwear
+              </Link>
+              <Link
+                to="/shop?category=cat-9-women"
+                onClick={() => setIsMobileMenuOpen(false)}
+                className="py-2 px-2.5 bg-white border border-[#E5E4DF] rounded-md hover:border-[#9ED912] text-[11px] truncate"
+              >
+                Women's Footwear
+              </Link>
+            </div>
           </div>
 
           <Link

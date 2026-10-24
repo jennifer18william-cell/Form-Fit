@@ -87,11 +87,21 @@ export const Footer: React.FC = () => {
                 </Link>
               </li>
               <li>
+                <Link to="/shop?category=cat-9-men" className="hover:text-[#4D7C0F] transition-colors">
+                  Men's Footwear
+                </Link>
+              </li>
+              <li>
+                <Link to="/shop?category=cat-9-women" className="hover:text-[#4D7C0F] transition-colors">
+                  Women's Footwear
+                </Link>
+              </li>
+              <li>
                 <Link to="/custom-studio" className="text-[#3F6212] hover:text-[#111111] hover:underline transition-colors font-semibold">
                   Custom T-Shirt Studio
                 </Link>
               </li>
-              {categories.slice(0, 3).map((cat) => (
+              {categories.slice(3, 5).map((cat) => (
                 <li key={cat.id}>
                   <Link to={`/shop?category=${cat.id}`} className="hover:text-[#4D7C0F] transition-colors">
                     {cat.name}

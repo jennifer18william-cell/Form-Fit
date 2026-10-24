@@ -7,6 +7,8 @@
  */
 
 import footwearStudioImg from '../assets/images/footwear_leather_sneakers_studio_1792835303853.jpg';
+import mensFootwearStudioImg from '../assets/images/mens_footwear_studio_poster_1792850976169.jpg';
+import womensFootwearStudioImg from '../assets/images/womens_footwear_studio_poster_1792850976435.jpg';
 import accessoriesStudioImg from '../assets/images/accessories_leather_goods_studio_1792835304388.jpg';
 
 export interface OptimizedImageResult {
@@ -229,6 +231,20 @@ export const FASHION_PRESETS: FashionPreset[] = [
     thumb: 'https://images.unsplash.com/photo-1576566588028-4147f3842f27?auto=format&fit=crop&w=200&q=70',
   },
   {
+    id: 'preset-footwear-men',
+    name: "Men's Suede Loafers & Court Sneakers",
+    category: "Men's Footwear",
+    url: mensFootwearStudioImg,
+    thumb: mensFootwearStudioImg,
+  },
+  {
+    id: 'preset-footwear-women',
+    name: "Women's Sculpted Sneakers & Tan Loafers",
+    category: "Women's Footwear",
+    url: womensFootwearStudioImg,
+    thumb: womensFootwearStudioImg,
+  },
+  {
     id: 'preset-footwear-court',
     name: 'Minimalist Leather Court Sneakers',
     category: 'Footwear',
@@ -258,6 +274,12 @@ export function getFashionFallbackImage(productName?: string, categoryName?: str
     query.includes('boot') ||
     query.includes('footwear')
   ) {
+    if (query.includes('women') || query.includes('heel') || query.includes('mule') || query.includes('flat')) {
+      return womensFootwearStudioImg;
+    }
+    if (query.includes('men')) {
+      return mensFootwearStudioImg;
+    }
     return footwearStudioImg;
   }
   if (

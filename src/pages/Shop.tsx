@@ -1,12 +1,27 @@
 import React, { useState, useMemo } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useStore } from '../context/StoreContext';
+import { useAuth } from '../context/AuthContext';
 import { ProductCard } from '../components/ProductCard';
 import { EmptyCatalogState } from '../components/EmptyCatalogState';
-import { Filter, SlidersHorizontal, Search, X } from 'lucide-react';
+import { Product } from '../types';
+import {
+  Filter,
+  SlidersHorizontal,
+  Search,
+  X,
+  ArrowRight,
+  PlusCircle,
+  ShieldCheck,
+} from 'lucide-react';
+
+import mensFootwearStudioImg from '../assets/images/mens_footwear_studio_poster_1792850976169.jpg';
+import womensFootwearStudioImg from '../assets/images/womens_footwear_studio_poster_1792850976435.jpg';
+import footwearFallbackImg from '../assets/images/footwear_leather_sneakers_studio_1792835303853.jpg';
 
 export const Shop: React.FC = () => {
   const { products, categories } = useStore();
+  const { isAdmin } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
 
   // Filter state synchronized with URL searchParams
@@ -14,29 +29,50 @@ export const Shop: React.FC = () => {
   const selectedGender = searchParams.get('gender') || '';
   const searchQuery = searchParams.get('search') || '';
   const [selectedSize, setSelectedSize] = useState<string>('');
-  const [priceMax, setPriceMax] = useState<number>(10000);
+  const [priceMax, setPriceMax] = useState<number>(15000);
   const [sortBy, setSortBy] = useState<string>('newest');
   const [isMobileFilterOpen, setIsMobileFilterOpen] = useState<boolean>(false);
 
-  const allSizes = ['XS', 'S', 'M', 'L', 'XL', 'XXL', '3XL', 'UK 7', 'UK 8', 'UK 9', 'UK 10'];
+  const selectedCategoryObj = categories.find((c) => c.id === selectedCategory);
 
-  const filteredProducts = useMemo(() => {
-    return products
-      .filter((p) => p.status === 'published')
+  const isFootwearCategoryId = (catId?: string) => {
+    if (!catId) return false;
+    if (catId === 'cat-9' || catId === 'cat-9-men' || catId === 'cat-9-women') return true;
+    const found = categories.find((c) => c.id === catId);
+    return found?.parent_id === 'cat-9' || found?.slug?.includes('footwear') || false;
+  };
+
+  const isFootwearZone =
+    isFootwearCategoryId(selectedCategory) || selectedGender === 'Footwear';
+
+  const isAllFootwearZone =
+    isFootwearZone &&
+    selectedCategory !== 'cat-9-men' &&
+    selectedCategory !== 'cat-9-women' &&
+    selectedCategoryObj?.parent_id !== 'cat-9';
+
+  const apparelSizes = ['XS', 'S', 'M', 'L', 'XL', 'XXL', '3XL'];
+  const footwearSizes = ['UK 4', 'UK 5', 'UK 6', 'UK 7', 'UK 8', 'UK 9', 'UK 10', 'UK 11'];
+  const activeSizeOptions = isFootwearZone ? footwearSizes : [...apparelSizes, 'UK 7', 'UK 8', 'UK 9', 'UK 10'];
+
+  const isProductFootwear = (p: Product) =>
+    isFootwearCategoryId(p.category_id) || p.gender_collection === 'Footwear';
+
+  const isProductMensFootwear = (p: Product) =>
+    p.category_id === 'cat-9-men' ||
+    (isProductFootwear(p) &&
+      p.category_id !== 'cat-9-women' &&
+      p.gender_collection === 'Men');
+
+  const isProductWomensFootwear = (p: Product) =>
+    p.category_id === 'cat-9-women' ||
+    (isProductFootwear(p) &&
+      p.category_id !== 'cat-9-men' &&
+      p.gender_collection === 'Women');
+
+  const applyCommonFiltersAndSort = (list: Product[]) => {
+    return list
       .filter((p) => {
-        if (selectedCategory && p.category_id !== selectedCategory) return false;
-        if (selectedGender) {
-          if (selectedGender === 'Footwear') {
-            if (p.gender_collection !== 'Footwear' && p.category_id !== 'cat-9') return false;
-          } else if (selectedGender === 'Accessories') {
-            if (p.gender_collection !== 'Accessories' && p.category_id !== 'cat-10') return false;
-          } else if (
-            p.gender_collection !== selectedGender &&
-            p.gender_collection !== 'Unisex'
-          ) {
-            return false;
-          }
-        }
         if (searchQuery) {
           const query = searchQuery.toLowerCase();
           const matchName = p.name.toLowerCase().includes(query);
@@ -53,7 +89,6 @@ export const Shop: React.FC = () => {
         }
         const effectivePrice = p.sale_price || p.regular_price;
         if (effectivePrice > priceMax) return false;
-
         return true;
       })
       .sort((a, b) => {
@@ -68,8 +103,83 @@ export const Shop: React.FC = () => {
         }
         return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
       });
+  };
+
+  const publishedProducts = useMemo(
+    () => products.filter((p) => p.status === 'published'),
+    [products]
+  );
+
+  // Total counts for Footwear Zone cards
+  const totalMensFootwearCount = useMemo(
+    () => publishedProducts.filter(isProductMensFootwear).length,
+    [publishedProducts, categories]
+  );
+  const totalWomensFootwearCount = useMemo(
+    () => publishedProducts.filter(isProductWomensFootwear).length,
+    [publishedProducts, categories]
+  );
+
+  // Filtered Footwear Zone sub-lists
+  const mensFootwearFiltered = useMemo(
+    () => applyCommonFiltersAndSort(publishedProducts.filter(isProductMensFootwear)),
+    [publishedProducts, categories, searchQuery, selectedSize, priceMax, sortBy]
+  );
+
+  const womensFootwearFiltered = useMemo(
+    () => applyCommonFiltersAndSort(publishedProducts.filter(isProductWomensFootwear)),
+    [publishedProducts, categories, searchQuery, selectedSize, priceMax, sortBy]
+  );
+
+  const unisexFootwearFiltered = useMemo(
+    () =>
+      applyCommonFiltersAndSort(
+        publishedProducts.filter(
+          (p) =>
+            isProductFootwear(p) &&
+            !isProductMensFootwear(p) &&
+            !isProductWomensFootwear(p)
+        )
+      ),
+    [publishedProducts, categories, searchQuery, selectedSize, priceMax, sortBy]
+  );
+
+  const filteredProducts = useMemo(() => {
+    const baseMatched = publishedProducts.filter((p) => {
+      if (selectedCategory) {
+        if (selectedCategory === 'cat-9') {
+          if (!isProductFootwear(p)) return false;
+        } else if (selectedCategory === 'cat-9-men') {
+          if (!isProductMensFootwear(p)) return false;
+        } else if (selectedCategory === 'cat-9-women') {
+          if (!isProductWomensFootwear(p)) return false;
+        } else if (p.category_id !== selectedCategory) {
+          return false;
+        }
+      }
+
+      if (selectedGender) {
+        if (selectedGender === 'Footwear') {
+          if (!isProductFootwear(p)) return false;
+        } else if (selectedGender === 'Accessories') {
+          if (p.gender_collection !== 'Accessories' && p.category_id !== 'cat-10') return false;
+        } else if (
+          selectedCategory !== 'cat-9-men' &&
+          selectedCategory !== 'cat-9-women' &&
+          p.gender_collection !== selectedGender &&
+          p.gender_collection !== 'Unisex'
+        ) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+
+    return applyCommonFiltersAndSort(baseMatched);
   }, [
-    products,
+    publishedProducts,
+    categories,
     selectedCategory,
     selectedGender,
     searchQuery,
@@ -82,6 +192,9 @@ export const Shop: React.FC = () => {
     const newParams = new URLSearchParams(searchParams);
     if (catId) {
       newParams.set('category', catId);
+      if (isFootwearCategoryId(catId)) {
+        newParams.delete('gender');
+      }
     } else {
       newParams.delete('category');
     }
@@ -90,20 +203,41 @@ export const Shop: React.FC = () => {
 
   const handleGenderChange = (gender: string) => {
     const newParams = new URLSearchParams(searchParams);
-    if (gender) {
+    if (gender === 'Footwear') {
+      newParams.delete('gender');
+      newParams.set('category', 'cat-9');
+    } else if (gender) {
       newParams.set('gender', gender);
+      if (isFootwearCategoryId(selectedCategory)) {
+        newParams.delete('category');
+      }
     } else {
       newParams.delete('gender');
     }
     setSearchParams(newParams);
   };
 
+  const handleFootwearZoneSelect = (targetCatId: 'cat-9' | 'cat-9-men' | 'cat-9-women') => {
+    const newParams = new URLSearchParams(searchParams);
+    newParams.delete('gender');
+    newParams.set('category', targetCatId);
+    setSearchParams(newParams);
+  };
+
   const clearAllFilters = () => {
     setSearchParams({});
     setSelectedSize('');
-    setPriceMax(10000);
+    setPriceMax(15000);
     setSortBy('newest');
   };
+
+  const topLevelCategories = useMemo(
+    () => categories.filter((c) => !c.parent_id),
+    [categories]
+  );
+
+  const getChildCategories = (parentId: string) =>
+    categories.filter((c) => c.parent_id === parentId);
 
   const renderFilterControls = () => (
     <div className="space-y-6">
@@ -111,7 +245,7 @@ export const Shop: React.FC = () => {
         <h3 className="font-space font-semibold text-xs uppercase tracking-wider flex items-center gap-2 text-[#18181B]">
           <Filter size={14} className="text-[#4D7C0F]" /> Filter Catalog
         </h3>
-        {(selectedCategory || selectedGender || selectedSize || searchQuery || priceMax < 10000) && (
+        {(selectedCategory || selectedGender || selectedSize || searchQuery || priceMax < 15000) && (
           <button
             onClick={clearAllFilters}
             className="text-xs font-medium text-red-600 hover:underline cursor-pointer"
@@ -125,55 +259,90 @@ export const Shop: React.FC = () => {
       <div className="space-y-2">
         <h4 className="font-space font-semibold text-xs text-[#18181B]">Collection</h4>
         <div className="space-y-1 text-xs">
-          {['', 'Men', 'Women', 'Unisex', 'Footwear', 'Accessories'].map((g) => (
-            <button
-              key={g || 'all'}
-              onClick={() => handleGenderChange(g)}
-              className={`block w-full text-left py-1.5 px-2.5 font-medium transition-colors cursor-pointer rounded-md ${
-                selectedGender === g
-                  ? 'bg-[#F4FBE1] text-[#111111] font-semibold border border-[#BEF264]'
-                  : 'hover:bg-[#F3F2EE] text-[#52525B]'
-              }`}
-            >
-              {g || 'All Collections'}
-            </button>
-          ))}
+          {['', 'Men', 'Women', 'Unisex', 'Footwear', 'Accessories'].map((g) => {
+            const isActive =
+              g === 'Footwear'
+                ? isFootwearZone
+                : !isFootwearZone && selectedGender === g && (g !== '' || !selectedCategory);
+
+            return (
+              <button
+                key={g || 'all'}
+                onClick={() => (g === '' ? clearAllFilters() : handleGenderChange(g))}
+                className={`block w-full text-left py-1.5 px-2.5 font-medium transition-colors cursor-pointer rounded-md ${
+                  isActive
+                    ? 'bg-[#F4FBE1] text-[#111111] font-semibold border border-[#BEF264]'
+                    : 'hover:bg-[#F3F2EE] text-[#52525B]'
+                }`}
+              >
+                {g === 'Footwear' ? 'Footwear Zone' : g || 'All Collections'}
+              </button>
+            );
+          })}
         </div>
       </div>
 
-      {/* Category Filter */}
+      {/* Category Filter with Footwear Subcategories */}
       <div className="space-y-2 pt-3 border-t border-[#E5E4DF]">
         <h4 className="font-space font-semibold text-xs text-[#18181B]">Categories</h4>
-        <div className="space-y-1 text-xs max-h-52 overflow-y-auto pr-1">
+        <div className="space-y-1 text-xs max-h-64 overflow-y-auto pr-1">
           <button
             onClick={() => handleCategoryChange('')}
             className={`block w-full text-left py-1.5 px-2.5 font-medium cursor-pointer rounded-md transition-colors ${
-              !selectedCategory
+              !selectedCategory && selectedGender !== 'Footwear'
                 ? 'bg-[#F4FBE1] text-[#111111] font-semibold border border-[#BEF264]'
                 : 'hover:bg-[#F3F2EE] text-[#52525B]'
             }`}
           >
             All Categories
           </button>
-          {categories.map((cat) => (
-            <button
-              key={cat.id}
-              onClick={() => handleCategoryChange(cat.id)}
-              className={`block w-full text-left py-1.5 px-2.5 font-medium cursor-pointer rounded-md transition-colors ${
-                selectedCategory === cat.id
-                  ? 'bg-[#F4FBE1] text-[#111111] font-semibold border border-[#BEF264]'
-                  : 'hover:bg-[#F3F2EE] text-[#52525B]'
-              }`}
-            >
-              {cat.name}
-            </button>
-          ))}
+          {topLevelCategories.map((cat) => {
+            const children = getChildCategories(cat.id);
+            const isParentSelected =
+              selectedCategory === cat.id ||
+              (cat.id === 'cat-9' && isAllFootwearZone);
+
+            return (
+              <React.Fragment key={cat.id}>
+                <button
+                  onClick={() => handleCategoryChange(cat.id)}
+                  className={`block w-full text-left py-1.5 px-2.5 font-medium cursor-pointer rounded-md transition-colors ${
+                    isParentSelected
+                      ? 'bg-[#F4FBE1] text-[#111111] font-semibold border border-[#BEF264]'
+                      : 'hover:bg-[#F3F2EE] text-[#52525B]'
+                  }`}
+                >
+                  {cat.id === 'cat-9' ? 'Footwear Zone' : cat.name}
+                </button>
+
+                {children.length > 0 && (
+                  <div className="pl-3 ml-2 border-l border-[#E5E4DF] space-y-1 my-1">
+                    {children.map((sub) => (
+                      <button
+                        key={sub.id}
+                        onClick={() => handleCategoryChange(sub.id)}
+                        className={`block w-full text-left py-1.5 px-2.5 text-[11px] font-medium cursor-pointer rounded-md transition-colors ${
+                          selectedCategory === sub.id
+                            ? 'bg-[#B8F130]/40 text-[#111111] font-semibold border border-[#9ED912]'
+                            : 'hover:bg-[#F3F2EE] text-[#52525B]'
+                        }`}
+                      >
+                        {sub.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </React.Fragment>
+            );
+          })}
         </div>
       </div>
 
       {/* Size Filter */}
       <div className="space-y-2 pt-3 border-t border-[#E5E4DF]">
-        <h4 className="font-space font-semibold text-xs text-[#18181B]">Available Size</h4>
+        <h4 className="font-space font-semibold text-xs text-[#18181B]">
+          {isFootwearZone ? 'Footwear Size (UK)' : 'Available Size'}
+        </h4>
         <div className="flex flex-wrap gap-1.5">
           <button
             onClick={() => setSelectedSize('')}
@@ -185,7 +354,7 @@ export const Shop: React.FC = () => {
           >
             All
           </button>
-          {allSizes.map((sz) => (
+          {activeSizeOptions.map((sz) => (
             <button
               key={sz}
               onClick={() => setSelectedSize(sz === selectedSize ? '' : sz)}
@@ -222,29 +391,77 @@ export const Shop: React.FC = () => {
     </div>
   );
 
+  const renderFootwearEmptyDepartment = (
+    deptTitle: string,
+    deptDesc: string,
+    targetCategoryId: 'cat-9-men' | 'cat-9-women'
+  ) => (
+    <div className="bg-white border border-[#E5E4DF] rounded-xl p-8 text-center space-y-3">
+      <p className="text-xs font-space font-bold uppercase tracking-wider text-[#65A30D]">
+        {deptTitle}
+      </p>
+      <h4 className="font-space font-bold text-lg text-[#18181B]">
+        {deptTitle} Under Curation
+      </h4>
+      <p className="text-xs text-[#64748B] max-w-md mx-auto leading-relaxed font-sans">
+        {deptDesc}
+      </p>
+      <div className="pt-2 flex flex-wrap items-center justify-center gap-3">
+        {isAdmin ? (
+          <Link
+            to={`/owner/products/new?category=${targetCategoryId}`}
+            className="px-5 py-2.5 bg-[#B8F130] hover:bg-[#AAE422] text-[#111111] font-space font-extrabold text-xs uppercase tracking-wider rounded-md transition-colors inline-flex items-center gap-2 whitespace-nowrap"
+          >
+            <PlusCircle size={14} /> Add {deptTitle}
+          </Link>
+        ) : (
+          <Link
+            to="/owner/login"
+            className="px-5 py-2.5 bg-[#B8F130] hover:bg-[#AAE422] text-[#111111] font-space font-extrabold text-xs uppercase tracking-wider rounded-md transition-colors inline-flex items-center gap-2 whitespace-nowrap"
+          >
+            <ShieldCheck size={14} /> Owner Login to Add {deptTitle}
+          </Link>
+        )}
+      </div>
+    </div>
+  );
+
+  const pageHeading = useMemo(() => {
+    if (selectedCategory === 'cat-9-men') return "Men's Footwear";
+    if (selectedCategory === 'cat-9-women') return "Women's Footwear";
+    if (isFootwearZone) return 'Footwear Zone';
+    if (selectedGender) {
+      if (['Accessories', 'Unisex'].includes(selectedGender)) {
+        return selectedGender === 'Unisex' ? 'Unisex Streetwear' : selectedGender;
+      }
+      return `${selectedGender}'s Fashion`;
+    }
+    if (selectedCategory) {
+      return selectedCategoryObj?.name || 'Category';
+    }
+    return 'Shop All Catalog';
+  }, [selectedCategory, selectedGender, isFootwearZone, selectedCategoryObj]);
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-10 space-y-8 text-[#18181B]">
       {/* Header */}
       <div className="border-b border-[#E5E4DF] pb-6 flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
           <span className="text-xs font-space font-bold uppercase tracking-wider text-[#4D7C0F]">
-            Form &amp; Fit Collection
+            {isFootwearZone ? 'Form & Fit · Footwear Zone' : 'Form & Fit Collection'}
           </span>
-          <h1 className="font-space font-bold text-3xl tracking-tight text-[#18181B] mt-0.5">
-            {selectedGender
-              ? ['Footwear', 'Accessories', 'Unisex'].includes(selectedGender)
-                ? selectedGender === 'Unisex'
-                  ? 'Unisex Streetwear'
-                  : selectedGender
-                : `${selectedGender}'s Fashion`
-              : selectedCategory
-              ? categories.find((c) => c.id === selectedCategory)?.name || 'Category'
-              : 'Shop All Catalog'}
+          <h1 className="font-space font-bold text-3xl tracking-tight text-[#18181B] mt-0.5 [text-wrap:balance]">
+            {pageHeading}
           </h1>
+          {isFootwearZone && (
+            <p className="text-xs sm:text-sm text-[#57534E] mt-1 font-sans max-w-2xl">
+              Explore dedicated Men&apos;s Footwear and Women&apos;s Footwear departments crafted on Italian-inspired lasts and full-grain leathers.
+            </p>
+          )}
           {searchQuery && (
             <p className="text-xs text-[#64748B] mt-1 font-sans">
               Search results for:{' '}
-              <span className="font-semibold text-[#18181B]">"{searchQuery}"</span>
+              <span className="font-semibold text-[#18181B]">&ldquo;{searchQuery}&rdquo;</span>
             </p>
           )}
         </div>
@@ -274,11 +491,160 @@ export const Shop: React.FC = () => {
         </div>
       </div>
 
+      {/* Dedicated Footwear Zone Banner: Separate Men's Footwear & Women's Footwear Categories */}
+      {isFootwearZone && (
+        <section className="space-y-5">
+          {/* Interactive Department Switcher */}
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="inline-flex flex-wrap items-center gap-1.5 p-1.5 bg-[#F3F2EE] border border-[#E5E4DF] rounded-lg">
+              <button
+                type="button"
+                onClick={() => handleFootwearZoneSelect('cat-9')}
+                className={`px-4 py-2 text-xs font-space font-bold rounded-md transition-colors cursor-pointer whitespace-nowrap ${
+                  isAllFootwearZone
+                    ? 'bg-[#B8F130] text-[#111111] shadow-2xs'
+                    : 'text-[#52525B] hover:text-[#111111] hover:bg-white/70'
+                }`}
+              >
+                All Footwear Zone
+              </button>
+              <button
+                type="button"
+                onClick={() => handleFootwearZoneSelect('cat-9-men')}
+                className={`px-4 py-2 text-xs font-space font-bold rounded-md transition-colors cursor-pointer whitespace-nowrap tabular-nums ${
+                  selectedCategory === 'cat-9-men'
+                    ? 'bg-[#B8F130] text-[#111111] shadow-2xs'
+                    : 'text-[#52525B] hover:text-[#111111] hover:bg-white/70'
+                }`}
+              >
+                Men&apos;s Footwear ({totalMensFootwearCount})
+              </button>
+              <button
+                type="button"
+                onClick={() => handleFootwearZoneSelect('cat-9-women')}
+                className={`px-4 py-2 text-xs font-space font-bold rounded-md transition-colors cursor-pointer whitespace-nowrap tabular-nums ${
+                  selectedCategory === 'cat-9-women'
+                    ? 'bg-[#B8F130] text-[#111111] shadow-2xs'
+                    : 'text-[#52525B] hover:text-[#111111] hover:bg-white/70'
+                }`}
+              >
+                Women&apos;s Footwear ({totalWomensFootwearCount})
+              </button>
+            </div>
+
+            {!isAllFootwearZone && (
+              <button
+                type="button"
+                onClick={() => handleFootwearZoneSelect('cat-9')}
+                className="text-xs font-space font-bold uppercase tracking-wider text-[#3F6212] hover:text-[#111111] transition-colors cursor-pointer whitespace-nowrap"
+              >
+                ← Back to Both Footwear Categories
+              </button>
+            )}
+          </div>
+
+          {/* Two Separate Category Cards Inside the Footwear Zone */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Category 1: Men's Footwear */}
+            <button
+              type="button"
+              onClick={() => handleFootwearZoneSelect('cat-9-men')}
+              className={`group text-left bg-white rounded-xl overflow-hidden border transition-all duration-200 cursor-pointer flex flex-col sm:flex-row items-stretch ${
+                selectedCategory === 'cat-9-men'
+                  ? 'border-[#65A30D] ring-2 ring-[#B8F130]/60'
+                  : 'border-[#E5E4DF] hover:border-[#9ED912]'
+              }`}
+            >
+              <div className="sm:w-48 md:w-52 lg:w-60 aspect-[4/3] sm:aspect-auto bg-[#F3ECE2] overflow-hidden shrink-0">
+                <img
+                  src={mensFootwearStudioImg}
+                  alt="Men's Footwear Category"
+                  referrerPolicy="no-referrer"
+                  className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                  onError={(e) => {
+                    const imgEl = e.currentTarget;
+                    imgEl.onerror = null;
+                    imgEl.src = footwearFallbackImg;
+                  }}
+                />
+              </div>
+              <div className="p-5 flex-1 flex flex-col justify-between space-y-3">
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-2 text-[11px] font-space font-bold uppercase tracking-wider text-[#4D7C0F] tabular-nums">
+                    <span>Category 01</span>
+                    <span aria-hidden="true">·</span>
+                    <span>{totalMensFootwearCount} Styles</span>
+                  </div>
+                  <h2 className="font-space font-bold text-xl text-[#111111] group-hover:text-[#4D7C0F] transition-colors">
+                    Men&apos;s Footwear
+                  </h2>
+                  <p className="text-xs text-[#57534E] font-sans leading-relaxed">
+                    Minimalist leather court sneakers, espresso suede loafers, and structured everyday silhouettes built for men.
+                  </p>
+                </div>
+                <span className="inline-flex items-center gap-1.5 text-xs font-space font-bold uppercase tracking-wider text-[#111111] group-hover:text-[#4D7C0F] transition-colors">
+                  <span>
+                    {selectedCategory === 'cat-9-men' ? "Viewing Men's Footwear" : "Shop Men's Footwear"}
+                  </span>
+                  <ArrowRight size={14} className="group-hover:translate-x-0.5 transition-transform" />
+                </span>
+              </div>
+            </button>
+
+            {/* Category 2: Women's Footwear */}
+            <button
+              type="button"
+              onClick={() => handleFootwearZoneSelect('cat-9-women')}
+              className={`group text-left bg-white rounded-xl overflow-hidden border transition-all duration-200 cursor-pointer flex flex-col sm:flex-row items-stretch ${
+                selectedCategory === 'cat-9-women'
+                  ? 'border-[#65A30D] ring-2 ring-[#B8F130]/60'
+                  : 'border-[#E5E4DF] hover:border-[#9ED912]'
+              }`}
+            >
+              <div className="sm:w-48 md:w-52 lg:w-60 aspect-[4/3] sm:aspect-auto bg-[#F3ECE2] overflow-hidden shrink-0">
+                <img
+                  src={womensFootwearStudioImg}
+                  alt="Women's Footwear Category"
+                  referrerPolicy="no-referrer"
+                  className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                  onError={(e) => {
+                    const imgEl = e.currentTarget;
+                    imgEl.onerror = null;
+                    imgEl.src = footwearFallbackImg;
+                  }}
+                />
+              </div>
+              <div className="p-5 flex-1 flex flex-col justify-between space-y-3">
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-2 text-[11px] font-space font-bold uppercase tracking-wider text-[#4D7C0F] tabular-nums">
+                    <span>Category 02</span>
+                    <span aria-hidden="true">·</span>
+                    <span>{totalWomensFootwearCount} Styles</span>
+                  </div>
+                  <h2 className="font-space font-bold text-xl text-[#111111] group-hover:text-[#4D7C0F] transition-colors">
+                    Women&apos;s Footwear
+                  </h2>
+                  <p className="text-xs text-[#57534E] font-sans leading-relaxed">
+                    Sculpted warm-ivory leather sneakers, cognac horsebit loafers, and refined daily footwear designed for women.
+                  </p>
+                </div>
+                <span className="inline-flex items-center gap-1.5 text-xs font-space font-bold uppercase tracking-wider text-[#111111] group-hover:text-[#4D7C0F] transition-colors">
+                  <span>
+                    {selectedCategory === 'cat-9-women' ? "Viewing Women's Footwear" : "Shop Women's Footwear"}
+                  </span>
+                  <ArrowRight size={14} className="group-hover:translate-x-0.5 transition-transform" />
+                </span>
+              </div>
+            </button>
+          </div>
+        </section>
+      )}
+
       {/* Mobile Filter Drawer */}
       {isMobileFilterOpen && (
         <div className="md:hidden fixed inset-0 z-50 flex justify-end">
           <div
-            className="fixed inset-0 bg-slate-900/25"
+            className="fixed inset-0 bg-black/25"
             onClick={() => setIsMobileFilterOpen(false)}
           />
           <div className="relative w-full max-w-xs bg-white h-full p-5 overflow-y-auto shadow-xl z-10 space-y-4">
@@ -309,10 +675,14 @@ export const Shop: React.FC = () => {
           {renderFilterControls()}
         </div>
 
-        {/* Main Products Grid */}
-        <div className="md:col-span-3 space-y-6">
+        {/* Main Products Content */}
+        <div className="md:col-span-3 space-y-8">
           <div className="flex items-center justify-between text-xs font-medium text-[#64748B]">
-            <span className="tabular-nums">Showing {filteredProducts.length} items</span>
+            <span className="tabular-nums">
+              {isAllFootwearZone
+                ? `Showing ${mensFootwearFiltered.length + womensFootwearFiltered.length + unisexFootwearFiltered.length} footwear items across Men's & Women's zones`
+                : `Showing ${filteredProducts.length} items`}
+            </span>
             {searchQuery && (
               <button
                 onClick={() => {
@@ -327,8 +697,114 @@ export const Shop: React.FC = () => {
             )}
           </div>
 
-          {filteredProducts.length === 0 ? (
-            products.filter((p) => p.status === 'published').length === 0 ? (
+          {isAllFootwearZone ? (
+            /* Separated Men's Footwear & Women's Footwear Sections Inside Footwear Zone */
+            <div className="space-y-12">
+              {/* Separate Section 1: Men's Footwear */}
+              <div className="space-y-5">
+                <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-2 border-b border-[#E5E4DF] pb-3">
+                  <div>
+                    <span className="text-[11px] font-space font-bold uppercase tracking-wider text-[#4D7C0F]">
+                      Footwear Zone · Men
+                    </span>
+                    <h2 className="font-space font-bold text-2xl tracking-tight text-[#111111] mt-0.5 tabular-nums">
+                      Men&apos;s Footwear ({mensFootwearFiltered.length})
+                    </h2>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleFootwearZoneSelect('cat-9-men')}
+                    className="text-xs font-space font-bold uppercase tracking-wider text-[#111111] hover:text-[#4D7C0F] inline-flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap"
+                  >
+                    <span>Open Men&apos;s Footwear</span>
+                    <ArrowRight size={14} />
+                  </button>
+                </div>
+
+                {mensFootwearFiltered.length > 0 ? (
+                  <div className="grid grid-cols-2 lg:grid-cols-3 gap-6">
+                    {mensFootwearFiltered.map((product) => (
+                      <ProductCard key={product.id} product={product} />
+                    ))}
+                  </div>
+                ) : (
+                  renderFootwearEmptyDepartment(
+                    "Men's Footwear",
+                    "Minimalist court sneakers, suede loafers, and leather boots for men appear exclusively in this section once published.",
+                    'cat-9-men'
+                  )
+                )}
+              </div>
+
+              {/* Separate Section 2: Women's Footwear */}
+              <div className="space-y-5">
+                <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-2 border-b border-[#E5E4DF] pb-3">
+                  <div>
+                    <span className="text-[11px] font-space font-bold uppercase tracking-wider text-[#4D7C0F]">
+                      Footwear Zone · Women
+                    </span>
+                    <h2 className="font-space font-bold text-2xl tracking-tight text-[#111111] mt-0.5 tabular-nums">
+                      Women&apos;s Footwear ({womensFootwearFiltered.length})
+                    </h2>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleFootwearZoneSelect('cat-9-women')}
+                    className="text-xs font-space font-bold uppercase tracking-wider text-[#111111] hover:text-[#4D7C0F] inline-flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap"
+                  >
+                    <span>Open Women&apos;s Footwear</span>
+                    <ArrowRight size={14} />
+                  </button>
+                </div>
+
+                {womensFootwearFiltered.length > 0 ? (
+                  <div className="grid grid-cols-2 lg:grid-cols-3 gap-6">
+                    {womensFootwearFiltered.map((product) => (
+                      <ProductCard key={product.id} product={product} />
+                    ))}
+                  </div>
+                ) : (
+                  renderFootwearEmptyDepartment(
+                    "Women's Footwear",
+                    "Sculpted leather sneakers, cognac loafers, and everyday silhouettes for women appear exclusively in this section once published.",
+                    'cat-9-women'
+                  )
+                )}
+              </div>
+
+              {/* Optional Unisex / General Footwear Section (only shown if such products exist) */}
+              {unisexFootwearFiltered.length > 0 && (
+                <div className="space-y-5">
+                  <div className="border-b border-[#E5E4DF] pb-3">
+                    <span className="text-[11px] font-space font-bold uppercase tracking-wider text-[#4D7C0F]">
+                      Footwear Zone · Unisex
+                    </span>
+                    <h2 className="font-space font-bold text-2xl tracking-tight text-[#111111] mt-0.5 tabular-nums">
+                      Unisex Footwear ({unisexFootwearFiltered.length})
+                    </h2>
+                  </div>
+                  <div className="grid grid-cols-2 lg:grid-cols-3 gap-6">
+                    {unisexFootwearFiltered.map((product) => (
+                      <ProductCard key={product.id} product={product} />
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : selectedCategory === 'cat-9-men' && filteredProducts.length === 0 ? (
+            renderFootwearEmptyDepartment(
+              "Men's Footwear",
+              "No Men's Footwear styles match your current filters or none have been published yet.",
+              'cat-9-men'
+            )
+          ) : selectedCategory === 'cat-9-women' && filteredProducts.length === 0 ? (
+            renderFootwearEmptyDepartment(
+              "Women's Footwear",
+              "No Women's Footwear styles match your current filters or none have been published yet.",
+              'cat-9-women'
+            )
+          ) : filteredProducts.length === 0 ? (
+            publishedProducts.length === 0 ? (
               <EmptyCatalogState />
             ) : (
               <div className="bg-white border border-[#E5E4DF] p-12 text-center space-y-4 rounded-xl">

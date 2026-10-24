@@ -79,12 +79,16 @@ export const Home: React.FC = () => {
     },
     {
       id: 'footwear',
-      title: 'Footwear',
-      desc: 'Minimalist court sneakers, suede runners, and daily loafers.',
+      title: 'Footwear Zone',
+      desc: "Separate Men's & Women's footwear zones — court sneakers, suede loafers, and boots.",
       link: '/shop?category=cat-9',
       imageKey: 'footwear-local',
       localImg: footwearStudioImg,
       fallbackImg: 'https://images.pexels.com/photos/2529148/pexels-photo-2529148.jpeg?auto=compress&cs=tinysrgb&w=800',
+      subLinks: [
+        { label: "Men's Footwear", to: '/shop?category=cat-9-men' },
+        { label: "Women's Footwear", to: '/shop?category=cat-9-women' },
+      ],
     },
     {
       id: 'accessories',
@@ -299,12 +303,11 @@ export const Home: React.FC = () => {
             const bgImage = card.localImg || categoryPhotos[card.imageKey] || card.fallbackImg;
 
             return (
-              <Link
+              <div
                 key={card.id}
-                to={card.link}
                 className="group bg-white border border-[#E5E4DF] hover:border-[#CBD5E1] rounded-xl overflow-hidden flex flex-col transition-all duration-200 hover:shadow-[0_8px_24px_rgba(24,24,27,0.06)] hover:-translate-y-0.5"
               >
-                <div className="aspect-[4/5] bg-[#F3F2EE] overflow-hidden relative">
+                <Link to={card.link} className="aspect-[4/5] bg-[#F3F2EE] overflow-hidden relative block">
                   <img
                     src={bgImage}
                     alt={card.title}
@@ -316,11 +319,11 @@ export const Home: React.FC = () => {
                       imgEl.src = card.fallbackImg;
                     }}
                   />
-                </div>
+                </Link>
 
-                <div className="p-4 bg-white flex-1 flex flex-col justify-between space-y-2">
+                <div className="p-4 bg-white flex-1 flex flex-col justify-between space-y-2.5">
                   <div>
-                    <div className="flex items-center justify-between gap-2">
+                    <Link to={card.link} className="flex items-center justify-between gap-2">
                       <h3 className="font-space font-semibold text-base text-[#111111] group-hover:text-[#65A30D] transition-colors">
                         {card.title}
                       </h3>
@@ -328,13 +331,29 @@ export const Home: React.FC = () => {
                         size={15}
                         className="text-[#94A3B8] group-hover:text-[#65A30D] group-hover:translate-x-0.5 transition-all shrink-0"
                       />
-                    </div>
+                    </Link>
                     <p className="text-xs text-[#64748B] font-sans line-clamp-2 leading-relaxed mt-1">
                       {card.desc}
                     </p>
                   </div>
+
+                  {card.subLinks && card.subLinks.length > 0 && (
+                    <div className="pt-2 border-t border-[#F3F2EE] flex items-center gap-2 text-[11px] font-space font-semibold text-[#3F6212]">
+                      {card.subLinks.map((sub, idx) => (
+                        <React.Fragment key={sub.to}>
+                          {idx > 0 && <span className="text-[#CBD5E1]" aria-hidden="true">·</span>}
+                          <Link
+                            to={sub.to}
+                            className="hover:text-[#111111] hover:underline transition-colors whitespace-nowrap"
+                          >
+                            {sub.label}
+                          </Link>
+                        </React.Fragment>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              </Link>
+              </div>
             );
           })}
         </div>

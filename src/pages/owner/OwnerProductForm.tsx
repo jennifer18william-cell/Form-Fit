@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { useStore } from '../../context/StoreContext';
 import { OwnerLayout } from '../../components/OwnerLayout';
 import { Product, ProductImage, ProductVariant, GenderCollection, ProductStatus } from '../../types';
@@ -25,10 +25,50 @@ import {
 
 export const OwnerProductForm: React.FC = () => {
   const { id } = useParams<{ id?: string }>();
+  const [searchParams] = useSearchParams();
+  const preselectedCatId = searchParams.get('category') || '';
   const { products, saveProduct, categories } = useStore();
   const navigate = useNavigate();
 
   const existingProduct = id ? products.find((p) => p.id === id) : null;
+
+  const initialCatId =
+    existingProduct?.category_id ||
+    (preselectedCatId && categories.some((c) => c.id === preselectedCatId)
+      ? preselectedCatId
+      : categories[0]?.id || '');
+
+  const initialGender: GenderCollection = existingProduct?.gender_collection
+    ? existingProduct.gender_collection
+    : initialCatId === 'cat-9-men'
+    ? 'Men'
+    : initialCatId === 'cat-9-women'
+    ? 'Women'
+    : initialCatId === 'cat-9'
+    ? 'Footwear'
+    : 'Unisex';
+
+  const getDefaultVariantsForCategory = (catId: string): ProductVariant[] => {
+    if (catId === 'cat-9-men' || catId === 'cat-9') {
+      return [
+        { id: generateUUID(), product_id: '', sku: 'SKU-UK7', size: 'UK 7', color: 'Ivory', stock_quantity: 10, is_active: true },
+        { id: generateUUID(), product_id: '', sku: 'SKU-UK8', size: 'UK 8', color: 'Ivory', stock_quantity: 15, is_active: true },
+        { id: generateUUID(), product_id: '', sku: 'SKU-UK9', size: 'UK 9', color: 'Ivory', stock_quantity: 15, is_active: true },
+      ];
+    }
+    if (catId === 'cat-9-women') {
+      return [
+        { id: generateUUID(), product_id: '', sku: 'SKU-UK5', size: 'UK 5', color: 'Ivory', stock_quantity: 10, is_active: true },
+        { id: generateUUID(), product_id: '', sku: 'SKU-UK6', size: 'UK 6', color: 'Ivory', stock_quantity: 15, is_active: true },
+        { id: generateUUID(), product_id: '', sku: 'SKU-UK7', size: 'UK 7', color: 'Ivory', stock_quantity: 15, is_active: true },
+      ];
+    }
+    return [
+      { id: generateUUID(), product_id: '', sku: 'SKU-S', size: 'S', color: 'Ivory', stock_quantity: 10, is_active: true },
+      { id: generateUUID(), product_id: '', sku: 'SKU-M', size: 'M', color: 'Ivory', stock_quantity: 15, is_active: true },
+      { id: generateUUID(), product_id: '', sku: 'SKU-L', size: 'L', color: 'Ivory', stock_quantity: 20, is_active: true },
+    ];
+  };
 
   // Form states
   const [name, setName] = useState(existingProduct?.name || '');
@@ -36,10 +76,8 @@ export const OwnerProductForm: React.FC = () => {
   const [sku, setSku] = useState(existingProduct?.sku || '');
   const [shortDesc, setShortDesc] = useState(existingProduct?.short_desc || '');
   const [description, setDescription] = useState(existingProduct?.description || '');
-  const [categoryId, setCategoryId] = useState(existingProduct?.category_id || categories[0]?.id || '');
-  const [genderCollection, setGenderCollection] = useState<GenderCollection>(
-    existingProduct?.gender_collection || 'Unisex'
-  );
+  const [categoryId, setCategoryId] = useState(initialCatId);
+  const [genderCollection, setGenderCollection] = useState<GenderCollection>(initialGender);
   const [regularPrice, setRegularPrice] = useState<number>(existingProduct?.regular_price || 999);
   const [salePrice, setSalePrice] = useState<number | undefined>(existingProduct?.sale_price);
   const [costPrice, setCostPrice] = useState<number | undefined>(existingProduct?.cost_price);
@@ -54,11 +92,7 @@ export const OwnerProductForm: React.FC = () => {
   // Images & Variants
   const [images, setImages] = useState<ProductImage[]>(existingProduct?.images || []);
   const [variants, setVariants] = useState<ProductVariant[]>(
-    existingProduct?.variants || [
-      { id: generateUUID(), product_id: '', sku: 'SKU-S', size: 'S', color: 'Ivory', stock_quantity: 10, is_active: true },
-      { id: generateUUID(), product_id: '', sku: 'SKU-M', size: 'M', color: 'Ivory', stock_quantity: 15, is_active: true },
-      { id: generateUUID(), product_id: '', sku: 'SKU-L', size: 'L', color: 'Ivory', stock_quantity: 20, is_active: true },
-    ]
+    existingProduct?.variants || getDefaultVariantsForCategory(initialCatId)
   );
 
   // Image Upload & URL states
@@ -805,14 +839,36 @@ export const OwnerProductForm: React.FC = () => {
                   <label className="block font-semibold text-[#18181B]">Store Category</label>
                   <select
                     value={categoryId}
-                    onChange={(e) => setCategoryId(e.target.value)}
+                    onChange={(e) => {
+                      const nextCatId = e.target.value;
+                      setCategoryId(nextCatId);
+                      if (nextCatId === 'cat-9-men') {
+                        setGenderCollection('Men');
+                      } else if (nextCatId === 'cat-9-women') {
+                        setGenderCollection('Women');
+                      } else if (nextCatId === 'cat-9') {
+                        setGenderCollection('Footwear');
+                      }
+                    }}
                     className={`${inputClass} cursor-pointer`}
                   >
-                    {categories.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
+                    {categories
+                      .filter((c) => !c.parent_id)
+                      .map((c) => {
+                        const subcats = categories.filter((sub) => sub.parent_id === c.id);
+                        return (
+                          <React.Fragment key={c.id}>
+                            <option value={c.id}>
+                              {c.id === 'cat-9' ? 'Footwear (Footwear Zone)' : c.name}
+                            </option>
+                            {subcats.map((sub) => (
+                              <option key={sub.id} value={sub.id}>
+                                &nbsp;&nbsp;↳ {sub.name}
+                              </option>
+                            ))}
+                          </React.Fragment>
+                        );
+                      })}
                   </select>
                 </div>
 

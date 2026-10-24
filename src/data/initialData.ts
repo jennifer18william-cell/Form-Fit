@@ -9,9 +9,11 @@ export const DEFAULT_CATEGORIES: Category[] = [
   { id: 'cat-6', name: 'Bottom Wear', slug: 'bottom-wear', description: 'Tailored trousers, denim, and joggers', display_order: 6 },
   { id: 'cat-7', name: 'Dresses & Co-ords', slug: 'dresses-coords', description: 'Statement dresses and matching sets', display_order: 7 },
   { id: 'cat-8', name: 'Ethnic Wear', slug: 'ethnic-wear', description: 'Modern traditional fusion & festive wear', display_order: 8 },
-  { id: 'cat-9', name: 'Footwear', slug: 'footwear', description: 'Minimalist sneakers and leather footwear', display_order: 9 },
-  { id: 'cat-10', name: 'Accessories', slug: 'accessories', description: 'Bags, caps, and lifestyle accents', display_order: 10 },
-  { id: 'cat-11', name: 'Custom Apparel', slug: 'custom-apparel', description: 'Personalized t-shirts and custom prints', display_order: 11 },
+  { id: 'cat-9', name: 'Footwear', slug: 'footwear', description: 'Dedicated footwear zone featuring sneakers, loafers, and leather silhouettes', display_order: 9 },
+  { id: 'cat-9-men', name: "Men's Footwear", slug: 'mens-footwear', description: 'Minimalist court sneakers, suede loafers, and boots for men', display_order: 10, parent_id: 'cat-9' },
+  { id: 'cat-9-women', name: "Women's Footwear", slug: 'womens-footwear', description: 'Sculpted leather sneakers, cognac loafers, and everyday flats for women', display_order: 11, parent_id: 'cat-9' },
+  { id: 'cat-10', name: 'Accessories', slug: 'accessories', description: 'Bags, caps, and lifestyle accents', display_order: 12 },
+  { id: 'cat-11', name: 'Custom Apparel', slug: 'custom-apparel', description: 'Personalized t-shirts and custom prints', display_order: 13 },
 ];
 
 export const DEFAULT_STORE_SETTINGS: StoreSettings = {
