@@ -1,5 +1,6 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { Analytics } from '@vercel/analytics/react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { StoreProvider } from './context/StoreContext';
 import { Navbar } from './components/Navbar';
@@ -58,6 +59,7 @@ export default function App() {
     <BrowserRouter>
       <AuthProvider>
         <StoreProvider>
+          <Analytics />
           <Routes>
             {/* Customer Routes */}
             <Route path="/" element={<CustomerLayout><Home /></CustomerLayout>} />
