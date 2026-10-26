@@ -87,7 +87,81 @@ export interface SupabaseEnvConfig {
 
 function cleanServerEnvValue(val?: string | null): string {
   if (!val) return '';
-  return String(val).trim().replace(/^["']+|["']+$/g, '').trim();
+  return String(val)
+    .replace(/[\u200B-\u200D\uFEFF]/g, '')
+    .trim()
+    .replace(/^["']+|["']+$/g, '')
+    .trim();
+}
+
+async function ensureParsedRequestBody(req: any): Promise<any> {
+  if (!req) return {};
+  const method = (req.method || 'GET').toUpperCase();
+  if (method === 'GET' || method === 'HEAD') {
+    return req.body && typeof req.body === 'object' ? req.body : {};
+  }
+
+  if (req.body && typeof req.body === 'object' && !Buffer.isBuffer(req.body)) {
+    return req.body;
+  }
+
+  if (typeof req.body === 'string') {
+    const trimmed = req.body.trim();
+    if (!trimmed) {
+      req.body = {};
+      return req.body;
+    }
+    try {
+      req.body = JSON.parse(trimmed);
+      return req.body;
+    } catch {
+      req.body = {};
+      return req.body;
+    }
+  }
+
+  if (Buffer.isBuffer(req.body)) {
+    try {
+      req.body = JSON.parse(req.body.toString('utf8'));
+      return req.body;
+    } catch {
+      req.body = {};
+      return req.body;
+    }
+  }
+
+  if (typeof req.on === 'function') {
+    try {
+      const raw = await new Promise<string>((resolve) => {
+        const chunks: Buffer[] = [];
+        req.on('data', (chunk: any) => {
+          chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk)));
+        });
+        req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
+        req.on('error', () => resolve(''));
+      });
+      if (raw.trim()) {
+        req.body = JSON.parse(raw.trim());
+        return req.body;
+      }
+    } catch {
+      // fall through
+    }
+  }
+
+  req.body = {};
+  return req.body;
+}
+
+function isApprovedMasterAdminEmail(email: string): boolean {
+  const clean = cleanServerEnvValue(email).toLowerCase();
+  if (!clean) return false;
+  const customAdminEmail = cleanServerEnvValue(process.env.ADMIN_EMAIL).toLowerCase();
+  return (
+    clean === 'admin@formandfit.in' ||
+    clean === 'owner@formandfit.in' ||
+    (Boolean(customAdminEmail) && clean === customAdminEmail)
+  );
 }
 
 export function normalizeServerSupabaseUrl(raw?: string | null): string {
@@ -204,7 +278,7 @@ export async function verifyAdminRequest(
   const expectedPasscode = configuredPasscode || 'FormFit2026!Admin';
 
   const isMasterHeaderValid =
-    (adminEmail === 'admin@formandfit.in' || adminEmail === 'owner@formandfit.in') &&
+    isApprovedMasterAdminEmail(adminEmail) &&
     Boolean(adminPasscode) &&
     (adminPasscode === expectedPasscode || adminPasscode === 'FormFit2026!Admin');
 
@@ -215,7 +289,7 @@ export async function verifyAdminRequest(
       const { data: userData, error: userErr } = await userClient.auth.getUser(bearerToken);
       if (!userErr && userData?.user) {
         const emailLower = (userData.user.email || '').toLowerCase();
-        if (emailLower === 'admin@formandfit.in' || emailLower === 'owner@formandfit.in') {
+        if (isApprovedMasterAdminEmail(emailLower)) {
           return {
             authorized: true,
             bearerToken,
@@ -631,6 +705,7 @@ function getWriteSupabaseClient(
 
 export async function handleProductsApi(req: any, res: any) {
   applyNoStoreHeaders(res);
+  await ensureParsedRequestBody(req);
 
   const method = (req.method || 'GET').toUpperCase();
   const reqUrl = new URL(req.url || '/api/products', `http://${req.headers?.host || 'localhost'}`);
@@ -1220,6 +1295,7 @@ export async function handleProductsApi(req: any, res: any) {
 
 export async function handleCategoriesApi(req: any, res: any) {
   applyNoStoreHeaders(res);
+  await ensureParsedRequestBody(req);
   const method = (req.method || 'GET').toUpperCase();
   const reqUrl = new URL(req.url || '/api/categories', `http://${req.headers?.host || 'localhost'}`);
   const targetId = req.query?.id || reqUrl.searchParams.get('id') || '';
@@ -1399,6 +1475,7 @@ export async function handleUploadImageApi(req: any, res: any) {
   if ((req.method || '').toUpperCase() !== 'POST') {
     return res.status(405).json({ success: false, error: 'Method not allowed.' });
   }
+  await ensureParsedRequestBody(req);
 
   const cfg = getSupabaseEnvConfig();
   const adminAuth = await verifyAdminRequest(req, cfg);
@@ -1512,7 +1589,7 @@ export async function handleAuthApi(req: any, res: any) {
   }
 
   const cfg = getSupabaseEnvConfig();
-  const body = req.body || {};
+  const body = await ensureParsedRequestBody(req);
   const action = String(body.action || '').trim();
 
   if (action === 'register') {
@@ -1641,8 +1718,7 @@ export async function handleAuthApi(req: any, res: any) {
 
     const configuredPasscode = cleanServerEnvValue(process.env.ADMIN_PASSCODE);
     const expectedPasscode = configuredPasscode || 'FormFit2026!Admin';
-    const isMasterEmail =
-      cleanEmail === 'admin@formandfit.in' || cleanEmail === 'owner@formandfit.in';
+    const isMasterEmail = isApprovedMasterAdminEmail(cleanEmail);
     const isMasterPasscode =
       cleanPasscode === expectedPasscode || cleanPasscode === 'FormFit2026!Admin';
 
@@ -1836,12 +1912,13 @@ export async function handleAuthApi(req: any, res: any) {
 
 export async function handleStoreApi(req: any, res: any) {
   applyNoStoreHeaders(res);
+  const body = await ensureParsedRequestBody(req);
   const method = (req.method || 'GET').toUpperCase();
   const reqUrl = new URL(req.url || '/api/store', `http://${req.headers?.host || 'localhost'}`);
   const resource =
     (req.query?.resource as string) ||
     reqUrl.searchParams.get('resource') ||
-    (req.body?.resource as string) ||
+    (body?.resource as string) ||
     'bootstrap';
 
   const cfg = getSupabaseEnvConfig();

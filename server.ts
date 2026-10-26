@@ -1,6 +1,7 @@
 import express from 'express';
 import { createServer as createViteServer } from 'vite';
 import dotenv from 'dotenv';
+import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import {
@@ -182,13 +183,23 @@ async function startServer() {
     }
   });
 
-  // Create Vite server in middleware mode
-  const vite = await createViteServer({
-    server: { middlewareMode: true },
-    appType: 'spa',
-  });
+  const distPath = path.resolve(__dirname, 'dist');
+  const distIndex = path.join(distPath, 'index.html');
 
-  app.use(vite.middlewares);
+  if (process.env.NODE_ENV === 'production' && fs.existsSync(distIndex)) {
+    app.use(express.static(distPath));
+    app.get('*', (_req, res) => {
+      res.sendFile(distIndex);
+    });
+  } else {
+    // Create Vite server in middleware mode
+    const vite = await createViteServer({
+      server: { middlewareMode: true },
+      appType: 'spa',
+    });
+
+    app.use(vite.middlewares);
+  }
 
   app.listen(PORT, () => {
     console.log(`Form & Fit full-stack server running at http://localhost:${PORT}`);
