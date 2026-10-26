@@ -11,6 +11,8 @@ import {
   CheckCircle2,
   ChevronRight,
   Palette,
+  AlertCircle,
+  RefreshCw,
 } from 'lucide-react';
 
 import footwearStudioImg from '../assets/images/footwear_leather_sneakers_studio_1792835303853.jpg';
@@ -19,7 +21,7 @@ import accessoriesStudioImg from '../assets/images/accessories_leather_goods_stu
 const EDITORIAL_HERO_ASSET = '/assets/aistudio/Form___Fit__Editorial_Essentials_b0cfeab9.png';
 
 export const Home: React.FC = () => {
-  const { products, storeSettings } = useStore();
+  const { products, storeSettings, loading, catalogError, refreshCatalog } = useStore();
   const [categoryPhotos, setCategoryPhotos] = useState<Record<string, string>>({});
 
   useEffect(() => {
@@ -49,7 +51,9 @@ export const Home: React.FC = () => {
     loadCategoryPhotography();
   }, []);
 
-  const publishedProducts = products.filter((p) => p.status === 'published');
+  const publishedProducts = [...products]
+    .filter((p) => p.status === 'published')
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
   const newArrivals = publishedProducts.slice(0, 8);
 
   const categoryCards = [
@@ -268,7 +272,43 @@ export const Home: React.FC = () => {
           </Link>
         </div>
 
-        {publishedProducts.length === 0 ? (
+        {loading && publishedProducts.length === 0 ? (
+          <div
+            className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6"
+            aria-label="Loading New Arrivals"
+          >
+            {[0, 1, 2, 3].map((idx) => (
+              <div
+                key={idx}
+                className="bg-white border border-[#E5E4DF] rounded-lg overflow-hidden animate-pulse"
+              >
+                <div className="aspect-[3/4] bg-[#EFECE6]" />
+                <div className="p-4 space-y-2.5">
+                  <div className="h-3 w-20 bg-[#E5E4DF] rounded" />
+                  <div className="h-4 w-3/4 bg-[#E5E4DF] rounded" />
+                  <div className="h-4 w-1/3 bg-[#E5E4DF] rounded" />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : catalogError && publishedProducts.length === 0 ? (
+          <div className="max-w-2xl mx-auto my-8 p-8 bg-white border border-[#FECACA] rounded-xl text-center space-y-4">
+            <AlertCircle size={28} className="mx-auto text-[#DC2626]" />
+            <h3 className="font-space font-bold text-lg text-[#18181B]">
+              Unable to Load New Arrivals
+            </h3>
+            <p className="text-xs text-[#52525B] max-w-md mx-auto leading-relaxed">
+              {catalogError}
+            </p>
+            <button
+              type="button"
+              onClick={() => refreshCatalog()}
+              className="px-5 py-2.5 bg-[#B8F130] hover:bg-[#AAE422] text-[#111111] font-space font-bold text-xs uppercase tracking-wider rounded-md inline-flex items-center gap-2 cursor-pointer transition-colors"
+            >
+              <RefreshCw size={14} /> Retry Loading Catalog
+            </button>
+          </div>
+        ) : publishedProducts.length === 0 ? (
           <EmptyCatalogState />
         ) : (
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">

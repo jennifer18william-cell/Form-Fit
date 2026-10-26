@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useStore } from '../context/StoreContext';
+import { useAuth } from '../context/AuthContext';
 import { ProductCard } from '../components/ProductCard';
 import { ProductVariant } from '../types';
-import { getFashionFallbackImage } from '../lib/imageOptimization';
+import { getFashionFallbackImage, resolvePublicImageUrl } from '../lib/imageOptimization';
 import {
   Heart,
   ShoppingBag,
@@ -11,14 +12,30 @@ import {
   RotateCcw,
   Shield,
   Ruler,
+  AlertCircle,
+  RefreshCw,
 } from 'lucide-react';
 
 export const ProductDetail: React.FC = () => {
   const { slug } = useParams<{ slug: string }>();
-  const { products, addToCart, toggleWishlist, isInWishlist, addReview } = useStore();
+  const {
+    products,
+    loading,
+    catalogError,
+    refreshCatalog,
+    addToCart,
+    toggleWishlist,
+    isInWishlist,
+    addReview,
+  } = useStore();
+  const { isAdmin } = useAuth();
   const navigate = useNavigate();
 
-  const product = products.find((p) => p.slug === slug);
+  const matchedProduct = products.find((p) => p.slug === slug);
+  const product =
+    matchedProduct && (matchedProduct.status === 'published' || isAdmin)
+      ? matchedProduct
+      : undefined;
 
   const [selectedImageIndex, setSelectedImageIndex] = useState<number>(0);
   const [selectedVariant, setSelectedVariant] = useState<ProductVariant | null>(() => {
@@ -28,6 +45,22 @@ export const ProductDetail: React.FC = () => {
       null
     );
   });
+
+  useEffect(() => {
+    if (product) {
+      setSelectedImageIndex(0);
+      setSelectedVariant((prev) => {
+        if (prev && product.variants?.some((v) => v.id === prev.id)) {
+          return prev;
+        }
+        return (
+          product.variants?.find((v) => v.is_active && v.stock_quantity > 0) ||
+          product.variants?.[0] ||
+          null
+        );
+      });
+    }
+  }, [product]);
   const [quantity, setQuantity] = useState<number>(1);
   const [activeTab, setActiveTab] = useState<'details' | 'care' | 'shipping'>('details');
 
@@ -35,6 +68,38 @@ export const ProductDetail: React.FC = () => {
   const [reviewerName, setReviewerName] = useState('');
   const [reviewRating, setReviewRating] = useState(5);
   const [reviewComment, setReviewComment] = useState('');
+
+  if (loading && !product) {
+    return (
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 grid grid-cols-1 lg:grid-cols-2 gap-12 animate-pulse">
+        <div className="aspect-[3/4] bg-[#EFECE6] rounded-xl" />
+        <div className="bg-white border border-[#E5E4DF] rounded-2xl p-8 space-y-6">
+          <div className="h-4 w-28 bg-[#E5E4DF] rounded" />
+          <div className="h-10 w-3/4 bg-[#E5E4DF] rounded" />
+          <div className="h-8 w-36 bg-[#E5E4DF] rounded" />
+          <div className="h-24 w-full bg-[#EFECE6] rounded-lg" />
+          <div className="h-12 w-full bg-[#E5E4DF] rounded-lg" />
+        </div>
+      </div>
+    );
+  }
+
+  if (catalogError && !product) {
+    return (
+      <div className="max-w-3xl mx-auto my-20 p-10 bg-white border border-[#FECACA] rounded-xl text-center space-y-4">
+        <AlertCircle size={30} className="mx-auto text-[#DC2626]" />
+        <h2 className="font-space font-bold text-2xl text-[#18181B]">Unable to Load Product</h2>
+        <p className="text-xs text-[#52525B] font-sans">{catalogError}</p>
+        <button
+          type="button"
+          onClick={() => refreshCatalog()}
+          className="px-6 py-2.5 bg-[#B8F130] text-[#111111] font-space font-bold text-xs rounded-md hover:bg-[#AAE422] inline-flex items-center gap-2 cursor-pointer transition-colors"
+        >
+          <RefreshCw size={14} /> Retry Loading
+        </button>
+      </div>
+    );
+  }
 
   if (!product) {
     return (
@@ -56,11 +121,13 @@ export const ProductDetail: React.FC = () => {
   const inWishlist = isInWishlist(product.id);
   const images = product.images || [];
   const fallbackUrl = getFashionFallbackImage(product.name, product.category?.name);
-  const currentImage =
+  const currentImage = resolvePublicImageUrl(
     images[selectedImageIndex]?.url ||
-    selectedVariant?.variant_image_url ||
-    images[0]?.url ||
-    fallbackUrl;
+      selectedVariant?.variant_image_url ||
+      images[0]?.url,
+    product.name,
+    product.category?.name
+  );
 
   const currentPrice =
     selectedVariant?.price_override || product.sale_price || product.regular_price;

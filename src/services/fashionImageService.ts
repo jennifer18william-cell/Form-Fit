@@ -1,7 +1,7 @@
-import footwearStudioImg from '../assets/images/footwear_leather_sneakers_studio_1792835303853.jpg';
-import mensFootwearStudioImg from '../assets/images/mens_footwear_studio_poster_1792850976169.jpg';
-import womensFootwearStudioImg from '../assets/images/womens_footwear_studio_poster_1792850976435.jpg';
-import accessoriesStudioImg from '../assets/images/accessories_leather_goods_studio_1792835304388.jpg';
+const footwearStudioImg = '/assets/presets/footwear-studio.jpg';
+const mensFootwearStudioImg = '/assets/presets/mens-footwear-studio.jpg';
+const womensFootwearStudioImg = '/assets/presets/womens-footwear-studio.jpg';
+const accessoriesStudioImg = '/assets/presets/accessories-studio.jpg';
 
 export interface FashionPhoto {
   id: string;

@@ -13,14 +13,27 @@ import {
   ArrowRight,
   PlusCircle,
   ShieldCheck,
+  AlertCircle,
+  RefreshCw,
 } from 'lucide-react';
+import {
+  getCategoryCanonicalKey,
+  isAccessoriesCategoryKey,
+  isFootwearCategoryKey,
+  isMensFootwearCategoryKey,
+  isProductFootwearItem,
+  isProductMensFootwearItem,
+  isProductWomensFootwearItem,
+  isWomensFootwearCategoryKey,
+  matchesProductCategoryFilter,
+} from '../lib/categoryMapping';
 
 import mensFootwearStudioImg from '../assets/images/mens_footwear_studio_poster_1792850976169.jpg';
 import womensFootwearStudioImg from '../assets/images/womens_footwear_studio_poster_1792850976435.jpg';
 import footwearFallbackImg from '../assets/images/footwear_leather_sneakers_studio_1792835303853.jpg';
 
 export const Shop: React.FC = () => {
-  const { products, categories } = useStore();
+  const { products, categories, loading, catalogError, refreshCatalog } = useStore();
   const { isAdmin } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -33,42 +46,32 @@ export const Shop: React.FC = () => {
   const [sortBy, setSortBy] = useState<string>('newest');
   const [isMobileFilterOpen, setIsMobileFilterOpen] = useState<boolean>(false);
 
-  const selectedCategoryObj = categories.find((c) => c.id === selectedCategory);
+  const selectedCategoryKey = getCategoryCanonicalKey(selectedCategory, categories);
+  const selectedCategoryObj =
+    categories.find((c) => c.id === selectedCategory || c.slug === selectedCategory) ||
+    categories.find((c) => getCategoryCanonicalKey(c.id, categories, c) === selectedCategoryKey);
 
-  const isFootwearCategoryId = (catId?: string) => {
-    if (!catId) return false;
-    if (catId === 'cat-9' || catId === 'cat-9-men' || catId === 'cat-9-women') return true;
-    const found = categories.find((c) => c.id === catId);
-    return found?.parent_id === 'cat-9' || found?.slug?.includes('footwear') || false;
-  };
+  const isFootwearCategoryId = (catId?: string) => isFootwearCategoryKey(catId, categories);
 
   const isFootwearZone =
     isFootwearCategoryId(selectedCategory) || selectedGender === 'Footwear';
 
+  const isMensFootwearSelected = isMensFootwearCategoryKey(selectedCategory, categories);
+  const isWomensFootwearSelected = isWomensFootwearCategoryKey(selectedCategory, categories);
+
   const isAllFootwearZone =
     isFootwearZone &&
-    selectedCategory !== 'cat-9-men' &&
-    selectedCategory !== 'cat-9-women' &&
-    selectedCategoryObj?.parent_id !== 'cat-9';
+    !isMensFootwearSelected &&
+    !isWomensFootwearSelected &&
+    getCategoryCanonicalKey(selectedCategoryObj?.parent_id, categories) !== 'footwear';
 
   const apparelSizes = ['XS', 'S', 'M', 'L', 'XL', 'XXL', '3XL'];
   const footwearSizes = ['UK 4', 'UK 5', 'UK 6', 'UK 7', 'UK 8', 'UK 9', 'UK 10', 'UK 11'];
   const activeSizeOptions = isFootwearZone ? footwearSizes : [...apparelSizes, 'UK 7', 'UK 8', 'UK 9', 'UK 10'];
 
-  const isProductFootwear = (p: Product) =>
-    isFootwearCategoryId(p.category_id) || p.gender_collection === 'Footwear';
-
-  const isProductMensFootwear = (p: Product) =>
-    p.category_id === 'cat-9-men' ||
-    (isProductFootwear(p) &&
-      p.category_id !== 'cat-9-women' &&
-      p.gender_collection === 'Men');
-
-  const isProductWomensFootwear = (p: Product) =>
-    p.category_id === 'cat-9-women' ||
-    (isProductFootwear(p) &&
-      p.category_id !== 'cat-9-men' &&
-      p.gender_collection === 'Women');
+  const isProductFootwear = (p: Product) => isProductFootwearItem(p, categories);
+  const isProductMensFootwear = (p: Product) => isProductMensFootwearItem(p, categories);
+  const isProductWomensFootwear = (p: Product) => isProductWomensFootwearItem(p, categories);
 
   const applyCommonFiltersAndSort = (list: Product[]) => {
     return list
@@ -147,13 +150,7 @@ export const Shop: React.FC = () => {
   const filteredProducts = useMemo(() => {
     const baseMatched = publishedProducts.filter((p) => {
       if (selectedCategory) {
-        if (selectedCategory === 'cat-9') {
-          if (!isProductFootwear(p)) return false;
-        } else if (selectedCategory === 'cat-9-men') {
-          if (!isProductMensFootwear(p)) return false;
-        } else if (selectedCategory === 'cat-9-women') {
-          if (!isProductWomensFootwear(p)) return false;
-        } else if (p.category_id !== selectedCategory) {
+        if (!matchesProductCategoryFilter(p, selectedCategory, categories)) {
           return false;
         }
       }
@@ -162,10 +159,15 @@ export const Shop: React.FC = () => {
         if (selectedGender === 'Footwear') {
           if (!isProductFootwear(p)) return false;
         } else if (selectedGender === 'Accessories') {
-          if (p.gender_collection !== 'Accessories' && p.category_id !== 'cat-10') return false;
+          if (
+            p.gender_collection !== 'Accessories' &&
+            !isAccessoriesCategoryKey(p.category_id, categories, p.category)
+          ) {
+            return false;
+          }
         } else if (
-          selectedCategory !== 'cat-9-men' &&
-          selectedCategory !== 'cat-9-women' &&
+          !isMensFootwearSelected &&
+          !isWomensFootwearSelected &&
           p.gender_collection !== selectedGender &&
           p.gender_collection !== 'Unisex'
         ) {
@@ -297,10 +299,11 @@ export const Shop: React.FC = () => {
             All Categories
           </button>
           {topLevelCategories.map((cat) => {
+            const catKey = getCategoryCanonicalKey(cat.id, categories, cat);
             const children = getChildCategories(cat.id);
             const isParentSelected =
-              selectedCategory === cat.id ||
-              (cat.id === 'cat-9' && isAllFootwearZone);
+              (Boolean(selectedCategoryKey) && selectedCategoryKey === catKey) ||
+              (catKey === 'footwear' && isAllFootwearZone);
 
             return (
               <React.Fragment key={cat.id}>
@@ -312,24 +315,28 @@ export const Shop: React.FC = () => {
                       : 'hover:bg-[#F3F2EE] text-[#52525B]'
                   }`}
                 >
-                  {cat.id === 'cat-9' ? 'Footwear Zone' : cat.name}
+                  {catKey === 'footwear' ? 'Footwear Zone' : cat.name}
                 </button>
 
                 {children.length > 0 && (
                   <div className="pl-3 ml-2 border-l border-[#E5E4DF] space-y-1 my-1">
-                    {children.map((sub) => (
-                      <button
-                        key={sub.id}
-                        onClick={() => handleCategoryChange(sub.id)}
-                        className={`block w-full text-left py-1.5 px-2.5 text-[11px] font-medium cursor-pointer rounded-md transition-colors ${
-                          selectedCategory === sub.id
-                            ? 'bg-[#B8F130]/40 text-[#111111] font-semibold border border-[#9ED912]'
-                            : 'hover:bg-[#F3F2EE] text-[#52525B]'
-                        }`}
-                      >
-                        {sub.name}
-                      </button>
-                    ))}
+                    {children.map((sub) => {
+                      const subKey = getCategoryCanonicalKey(sub.id, categories, sub);
+                      const isSubSelected = Boolean(selectedCategoryKey) && selectedCategoryKey === subKey;
+                      return (
+                        <button
+                          key={sub.id}
+                          onClick={() => handleCategoryChange(sub.id)}
+                          className={`block w-full text-left py-1.5 px-2.5 text-[11px] font-medium cursor-pointer rounded-md transition-colors ${
+                            isSubSelected
+                              ? 'bg-[#B8F130]/40 text-[#111111] font-semibold border border-[#9ED912]'
+                              : 'hover:bg-[#F3F2EE] text-[#52525B]'
+                          }`}
+                        >
+                          {sub.name}
+                        </button>
+                      );
+                    })}
                   </div>
                 )}
               </React.Fragment>
@@ -427,8 +434,8 @@ export const Shop: React.FC = () => {
   );
 
   const pageHeading = useMemo(() => {
-    if (selectedCategory === 'cat-9-men') return "Men's Footwear";
-    if (selectedCategory === 'cat-9-women') return "Women's Footwear";
+    if (isMensFootwearSelected) return "Men's Footwear";
+    if (isWomensFootwearSelected) return "Women's Footwear";
     if (isFootwearZone) return 'Footwear Zone';
     if (selectedGender) {
       if (['Accessories', 'Unisex'].includes(selectedGender)) {
@@ -440,7 +447,7 @@ export const Shop: React.FC = () => {
       return selectedCategoryObj?.name || 'Category';
     }
     return 'Shop All Catalog';
-  }, [selectedCategory, selectedGender, isFootwearZone, selectedCategoryObj]);
+  }, [selectedCategory, selectedGender, isFootwearZone, isMensFootwearSelected, isWomensFootwearSelected, selectedCategoryObj]);
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-10 space-y-8 text-[#18181B]">
@@ -512,7 +519,7 @@ export const Shop: React.FC = () => {
                 type="button"
                 onClick={() => handleFootwearZoneSelect('cat-9-men')}
                 className={`px-4 py-2 text-xs font-space font-bold rounded-md transition-colors cursor-pointer whitespace-nowrap tabular-nums ${
-                  selectedCategory === 'cat-9-men'
+                  isMensFootwearSelected
                     ? 'bg-[#B8F130] text-[#111111] shadow-2xs'
                     : 'text-[#52525B] hover:text-[#111111] hover:bg-white/70'
                 }`}
@@ -523,7 +530,7 @@ export const Shop: React.FC = () => {
                 type="button"
                 onClick={() => handleFootwearZoneSelect('cat-9-women')}
                 className={`px-4 py-2 text-xs font-space font-bold rounded-md transition-colors cursor-pointer whitespace-nowrap tabular-nums ${
-                  selectedCategory === 'cat-9-women'
+                  isWomensFootwearSelected
                     ? 'bg-[#B8F130] text-[#111111] shadow-2xs'
                     : 'text-[#52525B] hover:text-[#111111] hover:bg-white/70'
                 }`}
@@ -550,7 +557,7 @@ export const Shop: React.FC = () => {
               type="button"
               onClick={() => handleFootwearZoneSelect('cat-9-men')}
               className={`group text-left bg-white rounded-xl overflow-hidden border transition-all duration-200 cursor-pointer flex flex-col sm:flex-row items-stretch ${
-                selectedCategory === 'cat-9-men'
+                isMensFootwearSelected
                   ? 'border-[#65A30D] ring-2 ring-[#B8F130]/60'
                   : 'border-[#E5E4DF] hover:border-[#9ED912]'
               }`}
@@ -584,7 +591,7 @@ export const Shop: React.FC = () => {
                 </div>
                 <span className="inline-flex items-center gap-1.5 text-xs font-space font-bold uppercase tracking-wider text-[#111111] group-hover:text-[#4D7C0F] transition-colors">
                   <span>
-                    {selectedCategory === 'cat-9-men' ? "Viewing Men's Footwear" : "Shop Men's Footwear"}
+                    {isMensFootwearSelected ? "Viewing Men's Footwear" : "Shop Men's Footwear"}
                   </span>
                   <ArrowRight size={14} className="group-hover:translate-x-0.5 transition-transform" />
                 </span>
@@ -596,7 +603,7 @@ export const Shop: React.FC = () => {
               type="button"
               onClick={() => handleFootwearZoneSelect('cat-9-women')}
               className={`group text-left bg-white rounded-xl overflow-hidden border transition-all duration-200 cursor-pointer flex flex-col sm:flex-row items-stretch ${
-                selectedCategory === 'cat-9-women'
+                isWomensFootwearSelected
                   ? 'border-[#65A30D] ring-2 ring-[#B8F130]/60'
                   : 'border-[#E5E4DF] hover:border-[#9ED912]'
               }`}
@@ -630,7 +637,7 @@ export const Shop: React.FC = () => {
                 </div>
                 <span className="inline-flex items-center gap-1.5 text-xs font-space font-bold uppercase tracking-wider text-[#111111] group-hover:text-[#4D7C0F] transition-colors">
                   <span>
-                    {selectedCategory === 'cat-9-women' ? "Viewing Women's Footwear" : "Shop Women's Footwear"}
+                    {isWomensFootwearSelected ? "Viewing Women's Footwear" : "Shop Women's Footwear"}
                   </span>
                   <ArrowRight size={14} className="group-hover:translate-x-0.5 transition-transform" />
                 </span>
@@ -697,7 +704,43 @@ export const Shop: React.FC = () => {
             )}
           </div>
 
-          {isAllFootwearZone ? (
+          {loading && publishedProducts.length === 0 ? (
+            <div
+              className="grid grid-cols-2 lg:grid-cols-3 gap-6"
+              aria-label="Loading Catalog"
+            >
+              {[0, 1, 2, 3, 4, 5].map((idx) => (
+                <div
+                  key={idx}
+                  className="bg-white border border-[#E5E4DF] rounded-lg overflow-hidden animate-pulse"
+                >
+                  <div className="aspect-[3/4] bg-[#EFECE6]" />
+                  <div className="p-4 space-y-2.5">
+                    <div className="h-3 w-20 bg-[#E5E4DF] rounded" />
+                    <div className="h-4 w-3/4 bg-[#E5E4DF] rounded" />
+                    <div className="h-4 w-1/3 bg-[#E5E4DF] rounded" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : catalogError && publishedProducts.length === 0 ? (
+            <div className="bg-white border border-[#FECACA] p-10 text-center space-y-4 rounded-xl">
+              <AlertCircle size={30} className="mx-auto text-[#DC2626]" />
+              <h3 className="font-space font-bold text-xl text-[#18181B]">
+                Unable to Load Catalog
+              </h3>
+              <p className="text-xs text-[#52525B] max-w-md mx-auto leading-relaxed">
+                {catalogError}
+              </p>
+              <button
+                type="button"
+                onClick={() => refreshCatalog()}
+                className="px-6 py-2.5 bg-[#B8F130] hover:bg-[#AAE422] text-[#111111] font-space font-extrabold text-xs uppercase tracking-wider cursor-pointer rounded-md inline-flex items-center gap-2 transition-colors"
+              >
+                <RefreshCw size={14} /> Retry Loading Catalog
+              </button>
+            </div>
+          ) : isAllFootwearZone ? (
             /* Separated Men's Footwear & Women's Footwear Sections Inside Footwear Zone */
             <div className="space-y-12">
               {/* Separate Section 1: Men's Footwear */}
@@ -791,13 +834,13 @@ export const Shop: React.FC = () => {
                 </div>
               )}
             </div>
-          ) : selectedCategory === 'cat-9-men' && filteredProducts.length === 0 ? (
+          ) : isMensFootwearSelected && filteredProducts.length === 0 ? (
             renderFootwearEmptyDepartment(
               "Men's Footwear",
               "No Men's Footwear styles match your current filters or none have been published yet.",
               'cat-9-men'
             )
-          ) : selectedCategory === 'cat-9-women' && filteredProducts.length === 0 ? (
+          ) : isWomensFootwearSelected && filteredProducts.length === 0 ? (
             renderFootwearEmptyDepartment(
               "Women's Footwear",
               "No Women's Footwear styles match your current filters or none have been published yet.",

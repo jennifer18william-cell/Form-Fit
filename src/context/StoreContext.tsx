@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import {
   Product,
   Category,
@@ -10,6 +10,7 @@ import {
   StoreSettings,
   ContactMessage,
   ProductVariant,
+  ProductImage,
   ShippingAddress,
   CustomDesignData,
   OrderStatus,
@@ -22,10 +23,23 @@ import {
   DEFAULT_COUPONS,
   INITIAL_PRODUCTS,
 } from '../data/initialData';
-import { supabase, isSupabaseConfigured } from '../lib/supabase';
-import { generateUUID, getFashionFallbackImage } from '../lib/imageOptimization';
+import { supabase, isSupabaseConfigured, getAdminRequestHeaders } from '../lib/supabase';
+import {
+  generateUUID,
+  getFashionFallbackImage,
+  resolvePublicImageUrl,
+} from '../lib/imageOptimization';
+import {
+  CANONICAL_CATEGORIES,
+  ensureValidUUID,
+  getCanonicalCategorySpec,
+  isValidUUID,
+  normalizeCategoriesList,
+  resolveCategoryForProduct,
+} from '../lib/categoryMapping';
+import { useAuth } from './AuthContext';
 
-interface InventoryLog {
+export interface InventoryLog {
   id: string;
   productName: string;
   variantSku: string;
@@ -33,6 +47,57 @@ interface InventoryLog {
   reason: string;
   createdAt: string;
 }
+
+const PUBLIC_PRODUCT_SELECT = `
+  id,
+  name,
+  slug,
+  sku,
+  short_desc,
+  description,
+  category_id,
+  gender_collection,
+  regular_price,
+  sale_price,
+  fabric_material,
+  fit,
+  care_instructions,
+  status,
+  featured,
+  seo_title,
+  seo_description,
+  created_at,
+  updated_at,
+  category:categories(id, name, slug, description, image_url, display_order, parent_id),
+  images:product_images(id, product_id, url, storage_path, is_main, alt_text, display_order),
+  variants:product_variants(id, product_id, sku, size, color, color_hex, price_override, stock_quantity, variant_image_url, is_active)
+`;
+
+const ADMIN_PRODUCT_SELECT = `
+  id,
+  name,
+  slug,
+  sku,
+  short_desc,
+  description,
+  category_id,
+  gender_collection,
+  regular_price,
+  sale_price,
+  cost_price,
+  fabric_material,
+  fit,
+  care_instructions,
+  status,
+  featured,
+  seo_title,
+  seo_description,
+  created_at,
+  updated_at,
+  category:categories(id, name, slug, description, image_url, display_order, parent_id),
+  images:product_images(id, product_id, url, storage_path, is_main, alt_text, display_order),
+  variants:product_variants(id, product_id, sku, size, color, color_hex, price_override, stock_quantity, variant_image_url, is_active)
+`;
 
 interface StoreContextType {
   products: Product[];
@@ -47,12 +112,16 @@ interface StoreContextType {
   inventoryLogs: InventoryLog[];
   appliedCoupon: Coupon | null;
   loading: boolean;
+  catalogError: string | null;
+  unsyncedLocalProducts: Product[];
+  refreshCatalog: () => Promise<void>;
+  syncLocalProductsToDatabase: () => Promise<{ synced: number; failed: number; error?: string }>;
 
   // Product operations
   saveProduct: (productData: Partial<Product>) => Promise<Product>;
   deleteProduct: (id: string) => Promise<void>;
   toggleProductStatus: (id: string) => Promise<void>;
-  
+
   // Category operations
   saveCategory: (categoryData: Partial<Category>) => Promise<void>;
   deleteCategory: (id: string) => Promise<void>;
@@ -61,7 +130,12 @@ interface StoreContextType {
   adjustVariantStock: (variantId: string, quantityChange: number, reason: string) => Promise<void>;
 
   // Cart operations
-  addToCart: (product: Product, variant: ProductVariant, quantity?: number, customDesign?: CustomDesignData) => void;
+  addToCart: (
+    product: Product,
+    variant: ProductVariant,
+    quantity?: number,
+    customDesign?: CustomDesignData
+  ) => void;
   updateCartQuantity: (cartItemId: string, quantity: number) => void;
   removeFromCart: (cartItemId: string) => void;
   clearCart: () => void;
@@ -101,98 +175,105 @@ function safeStorageSet(key: string, value: any) {
   }
 }
 
-function ensureFootwearSubcategories(existing: Category[]): Category[] {
-  const result = [...existing];
-  const hasFootwearParent = result.some((c) => c.id === 'cat-9' || c.slug === 'footwear');
-  if (!hasFootwearParent) {
-    const parentDefault = DEFAULT_CATEGORIES.find((c) => c.id === 'cat-9');
-    if (parentDefault) result.push(parentDefault);
+function readLegacyLocalProducts(): Product[] {
+  try {
+    const raw = localStorage.getItem('form_fit_products');
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function normalizeClientProduct(
+  raw: any,
+  categoriesList: Category[],
+  stripPrivateFields: boolean
+): Product {
+  const joinedCat = Array.isArray(raw?.category) ? raw.category[0] : raw?.category;
+  const resolvedCat = resolveCategoryForProduct(raw.category_id, joinedCat, categoriesList);
+  const fallbackImg = getFashionFallbackImage(raw.name, resolvedCat?.name);
+
+  const rawImages: ProductImage[] = Array.isArray(raw.images) ? raw.images : [];
+  const cleanedImages: ProductImage[] =
+    rawImages.length > 0 && rawImages.some((i) => Boolean(i?.url) && !String(i.url).startsWith('blob:'))
+      ? rawImages
+          .filter((i) => Boolean(i?.url) && !String(i.url).startsWith('blob:'))
+          .map((img, idx) => ({
+            ...img,
+            id: img.id || generateUUID(),
+            product_id: raw.id,
+            url: resolvePublicImageUrl(img.url, raw.name, resolvedCat?.name),
+            is_main: img.is_main ?? idx === 0,
+            display_order: img.display_order ?? idx,
+          }))
+          .sort((a, b) => {
+            if (Boolean(a.is_main) !== Boolean(b.is_main)) return a.is_main ? -1 : 1;
+            return (a.display_order ?? 0) - (b.display_order ?? 0);
+          })
+      : [
+          {
+            id: generateUUID(),
+            product_id: raw.id,
+            url: fallbackImg,
+            is_main: true,
+            display_order: 0,
+          },
+        ];
+
+  const mainUrl = cleanedImages.find((i) => i.is_main)?.url || cleanedImages[0]?.url || fallbackImg;
+  const rawVariants: ProductVariant[] = Array.isArray(raw.variants) ? raw.variants : [];
+  const filteredVariants = stripPrivateFields
+    ? rawVariants.filter((v) => v && v.is_active !== false)
+    : rawVariants;
+
+  const cleaned: Product = {
+    ...raw,
+    regular_price: Number(raw.regular_price) || 0,
+    sale_price:
+      raw.sale_price !== undefined && raw.sale_price !== null && Number(raw.sale_price) > 0
+        ? Number(raw.sale_price)
+        : undefined,
+    category: resolvedCat,
+    images: cleanedImages,
+    variants: filteredVariants.map((v, idx) => ({
+      ...v,
+      stock_quantity: Math.max(0, Number(v.stock_quantity) || 0),
+      is_active: v.is_active !== false,
+      variant_image_url: v.variant_image_url
+        ? resolvePublicImageUrl(v.variant_image_url, raw.name, resolvedCat?.name)
+        : idx === 0
+        ? mainUrl
+        : undefined,
+    })),
+  };
+
+  if (stripPrivateFields) {
+    delete (cleaned as any).cost_price;
   }
 
-  const parentCat = result.find((c) => c.id === 'cat-9' || c.slug === 'footwear');
-  const parentId = parentCat?.id || 'cat-9';
-
-  const requiredSubcats: Category[] = [
-    {
-      id: 'cat-9-men',
-      name: "Men's Footwear",
-      slug: 'mens-footwear',
-      description: 'Minimalist court sneakers, suede loafers, and boots for men',
-      display_order: 10,
-      parent_id: parentId,
-    },
-    {
-      id: 'cat-9-women',
-      name: "Women's Footwear",
-      slug: 'womens-footwear',
-      description: 'Sculpted leather sneakers, cognac loafers, and everyday flats for women',
-      display_order: 11,
-      parent_id: parentId,
-    },
-  ];
-
-  const parentIndex = result.findIndex((c) => c.id === parentId);
-  let insertOffset = 1;
-
-  for (const sub of requiredSubcats) {
-    const existingIdx = result.findIndex((c) => c.id === sub.id || c.slug === sub.slug);
-    if (existingIdx === -1) {
-      if (parentIndex !== -1) {
-        result.splice(parentIndex + insertOffset, 0, sub);
-        insertOffset++;
-      } else {
-        result.push(sub);
-      }
-    } else if (!result[existingIdx].parent_id) {
-      result[existingIdx] = { ...result[existingIdx], parent_id: parentId };
-    }
-  }
-
-  return result;
+  return cleaned;
 }
 
 export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // Load local persistent states with automatic product image auto-healing
-  const [products, setProducts] = useState<Product[]>(() => {
-    const saved = localStorage.getItem('form_fit_products');
-    if (!saved) return INITIAL_PRODUCTS;
-    try {
-      const parsed: Product[] = JSON.parse(saved);
-      // Auto-heal products that may have empty images from prior failed uploads
-      return parsed.map((p) => {
-        if (!p.images || p.images.length === 0 || !p.images.some((i) => Boolean(i.url))) {
-          const fallbackUrl = getFashionFallbackImage(p.name, p.category?.name);
-          const healedImage = {
-            id: generateUUID(),
-            product_id: p.id,
-            url: fallbackUrl,
-            is_main: true,
-            display_order: 0,
-          };
-          return {
-            ...p,
-            images: [healedImage],
-            variants: (p.variants || []).map((v) => ({
-              ...v,
-              variant_image_url: v.variant_image_url || fallbackUrl,
-            })),
-          };
-        }
-        return p;
-      });
-    } catch {
-      return INITIAL_PRODUCTS;
-    }
-  });
+  const { isAdmin } = useAuth();
+
+  // Never initialize public storefront from stale browser localStorage; always load authoritative shared DB state
+  const [products, setProducts] = useState<Product[]>(INITIAL_PRODUCTS);
+  const [unsyncedLocalProducts, setUnsyncedLocalProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [catalogError, setCatalogError] = useState<string | null>(null);
+  const autoSyncAttemptedRef = useRef<boolean>(false);
 
   const [categories, setCategories] = useState<Category[]>(() => {
     const saved = localStorage.getItem('form_fit_categories');
-    if (!saved) return DEFAULT_CATEGORIES;
+    if (!saved) return normalizeCategoriesList(DEFAULT_CATEGORIES);
     try {
       const parsed: Category[] = JSON.parse(saved);
-      return ensureFootwearSubcategories(parsed);
+      return normalizeCategoriesList(parsed);
     } catch {
-      return DEFAULT_CATEGORIES;
+      return normalizeCategoriesList(DEFAULT_CATEGORIES);
     }
   });
 
@@ -201,25 +282,30 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     if (!saved) return [];
     try {
       const parsed: CartItem[] = JSON.parse(saved);
-      // Auto-heal cart item images if empty
       return parsed.map((item) => {
-        const fallbackUrl = getFashionFallbackImage(item.product?.name, item.product?.category?.name);
-        const resolvedUrl =
+        const resolvedUrl = resolvePublicImageUrl(
           item.variant?.variant_image_url ||
-          item.product?.images?.find((i) => i.is_main)?.url ||
-          item.product?.images?.[0]?.url ||
-          fallbackUrl;
+            item.product?.images?.find((i) => i.is_main)?.url ||
+            item.product?.images?.[0]?.url,
+          item.product?.name,
+          item.product?.category?.name
+        );
         return {
           ...item,
           variant: {
             ...item.variant,
-            variant_image_url: item.variant?.variant_image_url || resolvedUrl,
+            variant_image_url: resolvedUrl,
           },
           product: {
             ...item.product,
             images:
-              item.product?.images && item.product.images.length > 0 && item.product.images.some((i) => Boolean(i.url))
-                ? item.product.images
+              item.product?.images &&
+              item.product.images.length > 0 &&
+              item.product.images.some((i) => Boolean(i.url))
+                ? item.product.images.map((img) => ({
+                    ...img,
+                    url: resolvePublicImageUrl(img.url, item.product?.name, item.product?.category?.name),
+                  }))
                 : [
                     {
                       id: generateUUID(),
@@ -247,7 +333,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     return saved ? JSON.parse(saved) : [];
   });
 
-  const [coupons, setCoupons] = useState<Coupon[]>(() => {
+  const [coupons] = useState<Coupon[]>(() => {
     const saved = localStorage.getItem('form_fit_coupons');
     return saved ? JSON.parse(saved) : DEFAULT_COUPONS;
   });
@@ -273,12 +359,6 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   });
 
   const [appliedCoupon, setAppliedCoupon] = useState<Coupon | null>(null);
-  const [loading, setLoading] = useState<boolean>(true);
-
-  // Sync state to LocalStorage with quota protection
-  useEffect(() => {
-    safeStorageSet('form_fit_products', products);
-  }, [products]);
 
   useEffect(() => {
     safeStorageSet('form_fit_categories', categories);
@@ -304,50 +384,169 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     safeStorageSet('form_fit_inventory_logs', inventoryLogs);
   }, [inventoryLogs]);
 
-  // Load from Supabase if configured
-  useEffect(() => {
-    if (isSupabaseConfigured()) {
-      fetchProductsFromSupabase();
-      fetchCategoriesFromSupabase();
-      fetchOrdersFromSupabase();
-    } else {
-      setLoading(false);
+  // Fetch Categories from Shared Database / API
+  const fetchCategories = useCallback(async (): Promise<Category[]> => {
+    try {
+      const apiRes = await fetch(`/api/categories?t=${Date.now()}`, {
+        cache: 'no-store',
+      });
+      if (apiRes.ok) {
+        const json = await apiRes.json();
+        if (
+          json?.success &&
+          Array.isArray(json.categories) &&
+          (json.storageMode === 'supabase' || !isSupabaseConfigured())
+        ) {
+          const normalized = normalizeCategoriesList(json.categories);
+          setCategories(normalized);
+          return normalized;
+        }
+      }
+    } catch {
+      // fall through to direct Supabase fetch
     }
+
+    if (isSupabaseConfigured()) {
+      try {
+        const { data, error } = await supabase
+          .from('categories')
+          .select('id, name, slug, description, image_url, display_order, parent_id')
+          .order('display_order', { ascending: true });
+
+        if (!error && data && data.length > 0) {
+          const normalized = normalizeCategoriesList(data as Category[]);
+          setCategories(normalized);
+          return normalized;
+        }
+      } catch (err) {
+        console.error('Failed to fetch categories from Supabase:', err);
+      }
+    }
+
+    return categories;
   }, []);
 
-  const fetchProductsFromSupabase = async () => {
+  // Fetch Products from Shared Production Database (Never masked by stale localStorage)
+  const refreshCatalog = useCallback(async () => {
+    setCatalogError(null);
+    const activeCategories = await fetchCategories();
+
+    let fetchedFromSharedDb = false;
+    let dbProducts: Product[] = [];
+    let lastError: string | null = null;
+
+    // 1. Query backend API `/api/products` (cache-busted, strips `cost_price` for public visitors)
     try {
-      const { data, error } = await supabase
-        .from('products')
-        .select(`
-          *,
-          category:categories(*),
-          images:product_images(*),
-          variants:product_variants(*)
-        `);
+      const scopeParam = isAdmin ? 'admin' : 'public';
+      const headers = isAdmin ? await getAdminRequestHeaders() : undefined;
+      const res = await fetch(`/api/products?scope=${scopeParam}&t=${Date.now()}`, {
+        method: 'GET',
+        headers,
+        cache: 'no-store',
+      });
 
-      if (!error && data && data.length > 0) {
-        setProducts(data as Product[]);
+      if (res.ok) {
+        const payload = await res.json();
+        const useApiResult =
+          payload?.success &&
+          Array.isArray(payload.products) &&
+          (payload.storageMode === 'supabase' || !isSupabaseConfigured());
+
+        if (useApiResult) {
+          dbProducts = (payload.products as Product[]).map((p) =>
+            normalizeClientProduct(p, activeCategories, !isAdmin)
+          );
+          fetchedFromSharedDb = true;
+        }
+      } else {
+        const errPayload = await res.json().catch(() => null);
+        if (errPayload?.error && isSupabaseConfigured()) {
+          lastError = errPayload.error;
+        }
       }
-    } catch (err) {
-      console.error('Failed to fetch products from Supabase:', err);
-    } finally {
-      setLoading(false);
+    } catch {
+      // Fall back to direct Supabase SDK query below if configured
     }
-  };
 
-  const fetchCategoriesFromSupabase = async () => {
-    try {
-      const { data, error } = await supabase.from('categories').select('*').order('display_order', { ascending: true });
-      if (!error && data && data.length > 0) {
-        setCategories(ensureFootwearSubcategories(data as Category[]));
+    // 2. Direct Supabase query fallback (e.g. if client env is configured directly)
+    if (!fetchedFromSharedDb && isSupabaseConfigured()) {
+      try {
+        const { data: sessionData } = await supabase.auth.getSession();
+        const hasSupabaseJwt = Boolean(sessionData?.session?.access_token);
+        const selectColumns = isAdmin && hasSupabaseJwt ? ADMIN_PRODUCT_SELECT : PUBLIC_PRODUCT_SELECT;
+
+        const runSelect = async (cols: string) => {
+          let q = supabase
+            .from('products')
+            .select(cols)
+            .order('created_at', { ascending: false });
+          if (!isAdmin) {
+            q = q.eq('status', 'published');
+          }
+          return q;
+        };
+
+        let { data, error } = await runSelect(selectColumns);
+        if (error && selectColumns === ADMIN_PRODUCT_SELECT && error.code === '42501') {
+          const retry = await runSelect(PUBLIC_PRODUCT_SELECT);
+          data = retry.data;
+          error = retry.error;
+        }
+
+        if (error) {
+          lastError = error.message;
+        } else {
+          dbProducts = ((data as any[]) || []).map((row) =>
+            normalizeClientProduct(row as Product, activeCategories, !isAdmin)
+          );
+          fetchedFromSharedDb = true;
+          lastError = null;
+        }
+      } catch (err: any) {
+        lastError = err?.message || 'Unable to load catalog from database.';
       }
-    } catch (err) {
-      console.error('Failed to fetch categories:', err);
     }
-  };
 
-  const fetchOrdersFromSupabase = async () => {
+    if (fetchedFromSharedDb) {
+      // Sort newest arrivals first
+      const sorted = [...dbProducts].sort(
+        (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      );
+      setProducts(sorted);
+
+      // Detect any pre-existing owner products that were previously trapped in browser localStorage
+      if (isAdmin) {
+        const legacyLocal = readLegacyLocalProducts();
+        if (legacyLocal.length > 0) {
+          const dbIdSet = new Set(sorted.map((p) => ensureValidUUID(p.id)));
+          const dbSlugSet = new Set(sorted.map((p) => p.slug?.toLowerCase()));
+          const stranded = legacyLocal.filter(
+            (lp) =>
+              lp &&
+              lp.name &&
+              !dbIdSet.has(ensureValidUUID(lp.id)) &&
+              !dbSlugSet.has((lp.slug || '').toLowerCase())
+          );
+          setUnsyncedLocalProducts(stranded);
+          if (stranded.length === 0) {
+            // Clean up legacy local cache once all products are safely in the shared database
+            localStorage.removeItem('form_fit_products');
+          }
+        } else {
+          setUnsyncedLocalProducts([]);
+        }
+      } else {
+        setUnsyncedLocalProducts([]);
+      }
+    } else if (lastError) {
+      setCatalogError(lastError);
+    }
+
+    setLoading(false);
+  }, [isAdmin, fetchCategories]);
+
+  const fetchOrdersFromSupabase = useCallback(async () => {
+    if (!isSupabaseConfigured() || !isAdmin) return;
     try {
       const { data, error } = await supabase
         .from('orders')
@@ -359,18 +558,266 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     } catch (err) {
       console.error('Failed to fetch orders:', err);
     }
+  }, [isAdmin]);
+
+  // Initial load and re-fetch on auth role change or tab focus
+  useEffect(() => {
+    refreshCatalog();
+    fetchOrdersFromSupabase();
+
+    const handleVisibilityOrFocus = () => {
+      if (document.visibilityState === 'visible') {
+        refreshCatalog();
+      }
+    };
+
+    window.addEventListener('focus', handleVisibilityOrFocus);
+    document.addEventListener('visibilitychange', handleVisibilityOrFocus);
+    return () => {
+      window.removeEventListener('focus', handleVisibilityOrFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityOrFocus);
+    };
+  }, [refreshCatalog, fetchOrdersFromSupabase]);
+
+  /**
+   * Direct client-side Supabase persistence fallback when server does not hold `SUPABASE_SERVICE_ROLE_KEY`,
+   * using the browser's authenticated Owner JWT session + UUID category mapping + collision-safe SKUs.
+   */
+  const persistProductViaSupabaseClient = async (fullProduct: Product): Promise<Product> => {
+    const productId = ensureValidUUID(fullProduct.id);
+    const now = new Date().toISOString();
+
+    // 1. Resolve or seed UUID category in `public.categories`
+    let resolvedCategoryUuid: string | null = null;
+    const catSpec =
+      getCanonicalCategorySpec(fullProduct.category_id) ||
+      getCanonicalCategorySpec(fullProduct.category?.slug);
+
+    if (catSpec) {
+      const { data: foundCat } = await supabase
+        .from('categories')
+        .select('id')
+        .eq('slug', catSpec.slug)
+        .maybeSingle();
+
+      if (foundCat?.id) {
+        resolvedCategoryUuid = foundCat.id;
+      } else {
+        let parentUuid: string | null = null;
+        if (catSpec.parentAliasId) {
+          const pSpec = getCanonicalCategorySpec(catSpec.parentAliasId);
+          if (pSpec) {
+            const { data: pRow } = await supabase
+              .from('categories')
+              .upsert(
+                {
+                  id: pSpec.uuid,
+                  name: pSpec.name,
+                  slug: pSpec.slug,
+                  description: pSpec.description,
+                  display_order: pSpec.displayOrder,
+                  parent_id: null,
+                },
+                { onConflict: 'slug' }
+              )
+              .select('id')
+              .maybeSingle();
+            parentUuid = pRow?.id || pSpec.uuid;
+          }
+        }
+
+        const { data: createdCat } = await supabase
+          .from('categories')
+          .upsert(
+            {
+              id: catSpec.uuid,
+              name: catSpec.name,
+              slug: catSpec.slug,
+              description: catSpec.description,
+              display_order: catSpec.displayOrder,
+              parent_id: parentUuid,
+            },
+            { onConflict: 'slug' }
+          )
+          .select('id')
+          .maybeSingle();
+
+        resolvedCategoryUuid = createdCat?.id || null;
+      }
+    } else if (fullProduct.category_id && isValidUUID(fullProduct.category_id)) {
+      resolvedCategoryUuid = fullProduct.category_id;
+    }
+
+    // 2. Ensure unique slug & SKU
+    let safeSlug = fullProduct.slug;
+    const { data: existingSlug } = await supabase
+      .from('products')
+      .select('id')
+      .eq('slug', safeSlug)
+      .maybeSingle();
+    if (existingSlug && existingSlug.id !== productId) {
+      safeSlug = `${safeSlug}-${productId.slice(0, 6)}`;
+    }
+
+    let safeParentSku = fullProduct.sku || `FF-${Math.floor(100000 + Math.random() * 900000)}`;
+    const { data: existingSku } = await supabase
+      .from('products')
+      .select('id')
+      .eq('sku', safeParentSku)
+      .maybeSingle();
+    if (existingSku && existingSku.id !== productId) {
+      safeParentSku = `${safeParentSku}-${productId.slice(0, 4).toUpperCase()}`;
+    }
+
+    const payload: Record<string, any> = {
+      id: productId,
+      name: fullProduct.name,
+      slug: safeSlug,
+      sku: safeParentSku,
+      short_desc: fullProduct.short_desc || '',
+      description: fullProduct.description || '',
+      category_id: resolvedCategoryUuid,
+      gender_collection: fullProduct.gender_collection,
+      regular_price: fullProduct.regular_price,
+      sale_price: fullProduct.sale_price || null,
+      cost_price: fullProduct.cost_price || null,
+      fabric_material: fullProduct.fabric_material || '',
+      fit: fullProduct.fit || '',
+      care_instructions: fullProduct.care_instructions || '',
+      status: fullProduct.status,
+      featured: fullProduct.featured,
+      seo_title: fullProduct.seo_title || fullProduct.name,
+      seo_description: fullProduct.seo_description || fullProduct.short_desc || '',
+      updated_at: now,
+    };
+
+    let { error: prodErr } = await supabase.from('products').upsert(payload);
+    if (prodErr && prodErr.code === '23503' && payload.category_id) {
+      payload.category_id = null;
+      const retry = await supabase.from('products').upsert(payload);
+      prodErr = retry.error;
+    }
+
+    if (prodErr) {
+      if (prodErr.code === '42501') {
+        throw new Error(
+          'Database permission denied (Supabase RLS): Sign in with your Supabase Owner account, add SUPABASE_SERVICE_ROLE_KEY in Vercel Environment Variables, or run supabase/fix_product_visibility_rls.sql in Supabase SQL Editor.'
+        );
+      }
+      throw new Error(`Failed to save product in database: ${prodErr.message}`);
+    }
+
+    // 3. Sync product_images
+    const imageRows = (fullProduct.images || [])
+      .filter((img) => img && img.url && !img.url.startsWith('blob:'))
+      .map((img, idx) => ({
+        id: ensureValidUUID(img.id),
+        product_id: productId,
+        url: img.url,
+        storage_path: img.storage_path || null,
+        is_main: img.is_main ?? idx === 0,
+        alt_text: img.alt_text || fullProduct.name,
+        display_order: img.display_order ?? idx,
+      }));
+
+    if (imageRows.length > 0) {
+      const { error: imgErr } = await supabase.from('product_images').upsert(imageRows);
+      if (imgErr) {
+        throw new Error(`Product saved, but image upload to database failed: ${imgErr.message}`);
+      }
+    }
+
+    // 4. Sync product_variants with unique SKUs
+    const usedSkus = new Set<string>();
+    const variantRows: Array<Record<string, any>> = [];
+    const mainImgUrl = imageRows.find((i) => i.is_main)?.url || imageRows[0]?.url || null;
+
+    for (let idx = 0; idx < (fullProduct.variants || []).length; idx++) {
+      const v = fullProduct.variants![idx];
+      const vId = ensureValidUUID(v.id);
+      const cleanSize = (v.size || `V${idx + 1}`).replace(/[^a-zA-Z0-9]+/g, '').toUpperCase();
+      const isGeneric = /^SKU-(S|M|L|XL|XS|XXL|UK\d+|\d+)$/i.test((v.sku || '').trim());
+
+      let vSku = !v.sku || isGeneric ? `${safeParentSku}-${cleanSize}` : v.sku.trim();
+      if (usedSkus.has(vSku.toUpperCase())) {
+        vSku = `${vSku}-${idx + 1}`;
+      }
+
+      const { data: skuCollision } = await supabase
+        .from('product_variants')
+        .select('product_id')
+        .eq('sku', vSku)
+        .maybeSingle();
+
+      if (skuCollision && skuCollision.product_id !== productId) {
+        vSku = `${safeParentSku}-${cleanSize}-${productId.slice(0, 4).toUpperCase()}-${idx + 1}`;
+      }
+      usedSkus.add(vSku.toUpperCase());
+
+      variantRows.push({
+        id: vId,
+        product_id: productId,
+        sku: vSku,
+        size: v.size || null,
+        color: v.color || null,
+        color_hex: v.color_hex || null,
+        price_override: v.price_override || null,
+        stock_quantity: Math.max(0, Number(v.stock_quantity) || 0),
+        variant_image_url:
+          v.variant_image_url && !v.variant_image_url.startsWith('blob:')
+            ? v.variant_image_url
+            : idx === 0
+            ? mainImgUrl
+            : null,
+        is_active: v.is_active !== false,
+        updated_at: now,
+      });
+    }
+
+    if (variantRows.length > 0) {
+      const { error: varErr } = await supabase.from('product_variants').upsert(variantRows);
+      if (varErr) {
+        throw new Error(`Product saved, but variants failed to save: ${varErr.message}`);
+      }
+    }
+
+    // 5. Verify saved product in Supabase
+    const { data: verified, error: verifyErr } = await supabase
+      .from('products')
+      .select(ADMIN_PRODUCT_SELECT)
+      .eq('id', productId)
+      .maybeSingle();
+
+    if (verifyErr || !verified) {
+      throw new Error(
+        verifyErr?.message ||
+          'Product could not be verified in Supabase after saving. Please check database RLS policies.'
+      );
+    }
+
+    return normalizeClientProduct(verified, categories, false);
   };
 
   // Product Operations
   const saveProduct = async (productData: Partial<Product>): Promise<Product> => {
-    const isEditing = Boolean(productData.id);
-    const productId = productData.id || generateUUID();
+    const productId = ensureValidUUID(productData.id, generateUUID);
     const now = new Date().toISOString();
+    const parentSku =
+      (productData.sku && productData.sku.trim()) ||
+      `FF-${Math.floor(100000 + Math.random() * 900000)}`;
 
-    // Ensure product always has at least one valid image
-    let productImages = productData.images || [];
-    if (productImages.length === 0 || !productImages.some((i) => Boolean(i.url))) {
-      const fallbackUrl = getFashionFallbackImage(productData.name, categories.find((c) => c.id === productData.category_id)?.name);
+    const resolvedCat = resolveCategoryForProduct(
+      productData.category_id,
+      productData.category,
+      categories
+    );
+
+    // Ensure product always has at least one valid public-ready image
+    let productImages = (productData.images || []).filter(
+      (i) => Boolean(i?.url) && !String(i.url).startsWith('blob:')
+    );
+    if (productImages.length === 0) {
+      const fallbackUrl = getFashionFallbackImage(productData.name, resolvedCat?.name);
       productImages = [
         {
           id: generateUUID(),
@@ -383,8 +830,9 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     } else {
       productImages = productImages.map((img, idx) => ({
         ...img,
-        id: img.id || generateUUID(),
+        id: ensureValidUUID(img.id, generateUUID),
         product_id: productId,
+        url: resolvePublicImageUrl(img.url, productData.name, resolvedCat?.name),
         is_main: img.is_main ?? idx === 0,
         display_order: img.display_order ?? idx,
       }));
@@ -392,14 +840,14 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     const mainImgUrl = productImages.find((i) => i.is_main)?.url || productImages[0]?.url;
 
-    // Ensure variants have valid IDs and carry the photo URL
+    // Ensure variants have valid UUIDs and collision-free SKUs
     let productVariants = productData.variants || [];
     if (productVariants.length === 0) {
       productVariants = [
         {
           id: generateUUID(),
           product_id: productId,
-          sku: `SKU-${Date.now().toString().slice(-4)}`,
+          sku: `${parentSku}-M`,
           size: 'M',
           color: 'Standard',
           stock_quantity: 10,
@@ -408,19 +856,33 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         },
       ];
     } else {
-      productVariants = productVariants.map((v, idx) => ({
-        ...v,
-        id: v.id || generateUUID(),
-        product_id: productId,
-        variant_image_url: v.variant_image_url || (idx === 0 ? mainImgUrl : undefined),
-      }));
+      productVariants = productVariants.map((v, idx) => {
+        const cleanSize = (v.size || `V${idx + 1}`).replace(/[^a-zA-Z0-9]+/g, '').toUpperCase();
+        const isGeneric = /^SKU-(S|M|L|XL|XS|XXL|UK\d+|\d+)$/i.test((v.sku || '').trim());
+        return {
+          ...v,
+          id: ensureValidUUID(v.id, generateUUID),
+          product_id: productId,
+          sku: !v.sku || isGeneric ? `${parentSku}-${cleanSize}` : v.sku.trim(),
+          variant_image_url: v.variant_image_url
+            ? resolvePublicImageUrl(v.variant_image_url, productData.name, resolvedCat?.name)
+            : idx === 0
+            ? mainImgUrl
+            : undefined,
+        };
+      });
     }
 
     const fullProduct: Product = {
       id: productId,
-      name: productData.name || 'New Fashion Piece',
-      slug: productData.slug || (productData.name || 'product').toLowerCase().replace(/[^a-z0-9]+/g, '-'),
-      sku: productData.sku || `FF-${Math.floor(100000 + Math.random() * 900000)}`,
+      name: (productData.name || 'New Fashion Piece').trim(),
+      slug:
+        (productData.slug || '').trim() ||
+        (productData.name || 'product')
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/(^-|-$)/g, ''),
+      sku: parentSku,
       short_desc: productData.short_desc || '',
       description: productData.description || '',
       category_id: productData.category_id,
@@ -439,130 +901,313 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       updated_at: now,
       images: productImages,
       variants: productVariants,
-      category: categories.find((c) => c.id === productData.category_id),
+      category: resolvedCat,
     };
 
-    if (isEditing) {
-      setProducts((prev) => prev.map((p) => (p.id === productId ? fullProduct : p)));
-    } else {
-      setProducts((prev) => [fullProduct, ...prev]);
+    // Persist in Shared Database FIRST before confirming save
+    let savedProduct: Product | null = null;
+    let apiErrorMsg = '';
+
+    try {
+      const headers = await getAdminRequestHeaders();
+      const apiRes = await fetch('/api/products', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ product: fullProduct }),
+      });
+
+      const apiJson = await apiRes.json().catch(() => null);
+      if (
+        apiRes.ok &&
+        apiJson?.success &&
+        apiJson?.product &&
+        (apiJson.storageMode === 'supabase' || !isSupabaseConfigured())
+      ) {
+        savedProduct = normalizeClientProduct(apiJson.product as Product, categories, false);
+      } else if (apiJson?.error) {
+        apiErrorMsg = apiJson.error;
+      }
+    } catch (err: any) {
+      apiErrorMsg = err?.message || '';
     }
 
-    if (isSupabaseConfigured()) {
+    // Fallback to direct client Supabase write if server did not complete Supabase write
+    if (!savedProduct && isSupabaseConfigured()) {
+      savedProduct = await persistProductViaSupabaseClient(fullProduct);
+    }
+
+    if (!savedProduct) {
+      throw new Error(
+        apiErrorMsg ||
+          'Unable to persist product to the shared database. Please verify your admin session and database connection.'
+      );
+    }
+
+    setProducts((prev) => {
+      const exists = prev.some((p) => ensureValidUUID(p.id) === savedProduct!.id);
+      if (exists) {
+        return prev.map((p) => (ensureValidUUID(p.id) === savedProduct!.id ? savedProduct! : p));
+      }
+      return [savedProduct!, ...prev];
+    });
+
+    setUnsyncedLocalProducts((prev) =>
+      prev.filter(
+        (lp) =>
+          ensureValidUUID(lp.id) !== savedProduct!.id &&
+          lp.slug?.toLowerCase() !== savedProduct!.slug?.toLowerCase()
+      )
+    );
+
+    return savedProduct;
+  };
+
+  // Sync any legacy browser-only owner products into the shared production database
+  const syncLocalProductsToDatabase = useCallback(async (): Promise<{
+    synced: number;
+    failed: number;
+    error?: string;
+  }> => {
+    const legacy = unsyncedLocalProducts.length > 0 ? unsyncedLocalProducts : readLegacyLocalProducts();
+    if (legacy.length === 0) {
+      return { synced: 0, failed: 0 };
+    }
+
+    let synced = 0;
+    let failed = 0;
+    let lastErr: string | undefined;
+
+    for (const item of legacy) {
       try {
-        const payload = {
-          id: fullProduct.id,
-          name: fullProduct.name,
-          slug: fullProduct.slug,
-          sku: fullProduct.sku,
-          short_desc: fullProduct.short_desc,
-          description: fullProduct.description,
-          category_id: fullProduct.category_id || null,
-          gender_collection: fullProduct.gender_collection,
-          regular_price: fullProduct.regular_price,
-          sale_price: fullProduct.sale_price || null,
-          cost_price: fullProduct.cost_price || null,
-          fabric_material: fullProduct.fabric_material,
-          fit: fullProduct.fit,
-          care_instructions: fullProduct.care_instructions,
-          status: fullProduct.status,
-          featured: fullProduct.featured,
-          seo_title: fullProduct.seo_title,
-          seo_description: fullProduct.seo_description,
-          updated_at: now,
-        };
-
-        await supabase.from('products').upsert(payload);
-
-        // Upsert images
-        if (fullProduct.images && fullProduct.images.length > 0) {
-          for (const img of fullProduct.images) {
-            await supabase.from('product_images').upsert({
-              id: img.id,
-              product_id: productId,
-              url: img.url,
-              storage_path: img.storage_path || null,
-              is_main: img.is_main,
-              display_order: img.display_order,
-            });
-          }
-        }
-
-        // Upsert variants
-        if (fullProduct.variants && fullProduct.variants.length > 0) {
-          for (const v of fullProduct.variants) {
-            await supabase.from('product_variants').upsert({
-              id: v.id,
-              product_id: productId,
-              sku: v.sku,
-              size: v.size || null,
-              color: v.color || null,
-              color_hex: v.color_hex || null,
-              price_override: v.price_override || null,
-              stock_quantity: v.stock_quantity,
-              variant_image_url: v.variant_image_url || null,
-              is_active: v.is_active,
-            });
-          }
-        }
-      } catch (err) {
-        console.error('Supabase product save error:', err);
+        await saveProduct(item);
+        synced++;
+      } catch (err: any) {
+        failed++;
+        lastErr = err?.message || 'Database sync failed';
       }
     }
 
-    return fullProduct;
-  };
+    if (failed === 0) {
+      localStorage.removeItem('form_fit_products');
+      setUnsyncedLocalProducts([]);
+      await refreshCatalog();
+    }
+
+    return { synced, failed, error: lastErr };
+  }, [unsyncedLocalProducts, refreshCatalog]);
+
+  // Auto-attempt one background sync when an admin opens the dashboard and has unsynced local products
+  useEffect(() => {
+    if (isAdmin && unsyncedLocalProducts.length > 0 && !autoSyncAttemptedRef.current) {
+      autoSyncAttemptedRef.current = true;
+      syncLocalProductsToDatabase().catch(() => {});
+    }
+    if (!isAdmin) {
+      autoSyncAttemptedRef.current = false;
+    }
+  }, [isAdmin, unsyncedLocalProducts.length, syncLocalProductsToDatabase]);
 
   const deleteProduct = async (id: string) => {
-    setProducts((prev) => prev.filter((p) => p.id !== id));
-    if (isSupabaseConfigured()) {
-      await supabase.from('products').delete().eq('id', id);
+    const validId = ensureValidUUID(id);
+    let deletedOnServer = false;
+    let errMessage = '';
+
+    try {
+      const headers = await getAdminRequestHeaders();
+      const res = await fetch(`/api/products?id=${encodeURIComponent(validId)}`, {
+        method: 'DELETE',
+        headers,
+      });
+      const json = await res.json().catch(() => null);
+      if (res.ok && json?.success && (json.storageMode === 'supabase' || !isSupabaseConfigured())) {
+        deletedOnServer = true;
+      } else if (json?.error) {
+        errMessage = json.error;
+      }
+    } catch (err: any) {
+      errMessage = err?.message || '';
     }
+
+    if (!deletedOnServer && isSupabaseConfigured()) {
+      const { error } = await supabase.from('products').delete().eq('id', validId);
+      if (error) {
+        throw new Error(`Failed to delete product from database: ${error.message}`);
+      }
+      deletedOnServer = true;
+    }
+
+    if (!deletedOnServer) {
+      throw new Error(errMessage || 'Failed to delete product from shared database.');
+    }
+
+    setProducts((prev) => prev.filter((p) => p.id !== id && ensureValidUUID(p.id) !== validId));
+    setUnsyncedLocalProducts((prev) =>
+      prev.filter((p) => p.id !== id && ensureValidUUID(p.id) !== validId)
+    );
   };
 
   const toggleProductStatus = async (id: string) => {
+    const target = products.find((p) => p.id === id || ensureValidUUID(p.id) === ensureValidUUID(id));
+    if (!target) return;
+
+    const nextStatus = target.status === 'published' ? 'draft' : 'published';
+    const validId = ensureValidUUID(target.id);
+
+    let updatedOnServer = false;
+    let needsFullUpsert = false;
+    let errMessage = '';
+
+    try {
+      const headers = await getAdminRequestHeaders();
+      const res = await fetch('/api/products', {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({ id: validId, status: nextStatus }),
+      });
+      const json = await res.json().catch(() => null);
+      if (res.ok && json?.success && (json.storageMode === 'supabase' || !isSupabaseConfigured())) {
+        updatedOnServer = true;
+      } else if (json?.code === 'PRODUCT_NOT_IN_DB' || res.status === 404) {
+        needsFullUpsert = true;
+      } else if (json?.error) {
+        errMessage = json.error;
+      }
+    } catch (err: any) {
+      errMessage = err?.message || '';
+    }
+
+    if (needsFullUpsert) {
+      await saveProduct({ ...target, status: nextStatus });
+      return;
+    }
+
+    if (!updatedOnServer && isSupabaseConfigured()) {
+      const { data, error } = await supabase
+        .from('products')
+        .update({ status: nextStatus, updated_at: new Date().toISOString() })
+        .eq('id', validId)
+        .select('id, status');
+
+      if (error) {
+        throw new Error(`Failed to update product status in database: ${error.message}`);
+      }
+      if (!data || data.length === 0) {
+        await saveProduct({ ...target, status: nextStatus });
+        return;
+      }
+      updatedOnServer = true;
+    }
+
+    if (!updatedOnServer) {
+      throw new Error(errMessage || 'Failed to update product status in shared database.');
+    }
+
     setProducts((prev) =>
-      prev.map((p) => {
-        if (p.id === id) {
-          const nextStatus = p.status === 'published' ? 'draft' : 'published';
-          if (isSupabaseConfigured()) {
-            supabase.from('products').update({ status: nextStatus }).eq('id', id);
-          }
-          return { ...p, status: nextStatus };
-        }
-        return p;
-      })
+      prev.map((p) =>
+        p.id === id || ensureValidUUID(p.id) === validId
+          ? { ...p, status: nextStatus, updated_at: new Date().toISOString() }
+          : p
+      )
     );
   };
 
   // Category Operations
   const saveCategory = async (categoryData: Partial<Category>) => {
-    const id = categoryData.id || `cat_${Date.now()}`;
+    const spec =
+      getCanonicalCategorySpec(categoryData.id) || getCanonicalCategorySpec(categoryData.slug);
+    const id = spec ? spec.uuid : ensureValidUUID(categoryData.id, generateUUID);
+    const slug =
+      spec?.slug ||
+      (categoryData.slug || categoryData.name || 'category')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/(^-|-$)/g, '');
+
+    const parentSpec = getCanonicalCategorySpec(categoryData.parent_id);
+    const resolvedParentId = parentSpec
+      ? parentSpec.uuid
+      : isValidUUID(categoryData.parent_id)
+      ? categoryData.parent_id
+      : undefined;
+
     const newCat: Category = {
       id,
-      name: categoryData.name || 'New Category',
-      slug: categoryData.slug || (categoryData.name || 'category').toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+      name: (categoryData.name || 'New Category').trim(),
+      slug,
       description: categoryData.description || '',
       image_url: categoryData.image_url,
       display_order: categoryData.display_order || categories.length + 1,
-      parent_id: categoryData.parent_id,
+      parent_id: resolvedParentId,
     };
 
-    setCategories((prev) => {
-      const exists = prev.some((c) => c.id === id);
-      return exists ? prev.map((c) => (c.id === id ? newCat : c)) : [...prev, newCat];
-    });
-
-    if (isSupabaseConfigured()) {
-      await supabase.from('categories').upsert(newCat);
+    try {
+      const headers = await getAdminRequestHeaders();
+      const res = await fetch('/api/categories', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ category: newCat }),
+      });
+      if (!res.ok && isSupabaseConfigured()) {
+        // Seed top-level canonical categories first if needed
+        for (const c of CANONICAL_CATEGORIES.filter((item) => !item.parentUuid)) {
+          await supabase.from('categories').upsert(
+            {
+              id: c.uuid,
+              name: c.name,
+              slug: c.slug,
+              description: c.description,
+              display_order: c.displayOrder,
+              parent_id: null,
+            },
+            { onConflict: 'slug' }
+          );
+        }
+        await supabase.from('categories').upsert(
+          {
+            id: newCat.id,
+            name: newCat.name,
+            slug: newCat.slug,
+            description: newCat.description || '',
+            image_url: newCat.image_url || null,
+            display_order: newCat.display_order,
+            parent_id: newCat.parent_id || null,
+          },
+          { onConflict: 'slug' }
+        );
+      }
+    } catch (err) {
+      console.error('Save category notice:', err);
     }
+
+    setCategories((prev) => {
+      const exists = prev.some((c) => c.id === id || c.slug === slug);
+      const next = exists
+        ? prev.map((c) => (c.id === id || c.slug === slug ? newCat : c))
+        : [...prev, newCat];
+      return normalizeCategoriesList(next);
+    });
   };
 
   const deleteCategory = async (id: string) => {
-    setCategories((prev) => prev.filter((c) => c.id !== id));
-    if (isSupabaseConfigured()) {
-      await supabase.from('categories').delete().eq('id', id);
+    try {
+      const headers = await getAdminRequestHeaders();
+      const res = await fetch(`/api/categories?id=${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+        headers,
+      });
+      if (!res.ok && isSupabaseConfigured()) {
+        const spec = getCanonicalCategorySpec(id);
+        if (spec) {
+          await supabase.from('categories').delete().eq('slug', spec.slug);
+        } else if (isValidUUID(id)) {
+          await supabase.from('categories').delete().eq('id', id);
+        }
+      }
+    } catch (err) {
+      console.error('Delete category notice:', err);
     }
+
+    setCategories((prev) => prev.filter((c) => c.id !== id));
   };
 
   // Inventory adjustment
@@ -596,32 +1241,50 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     setInventoryLogs((prev) => [newLog, ...prev]);
 
-    if (isSupabaseConfigured()) {
-      try {
-        const { data } = await supabase.from('product_variants').select('stock_quantity').eq('id', variantId).single();
+    try {
+      const headers = await getAdminRequestHeaders();
+      const res = await fetch('/api/products', {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({ variantId, quantityChange }),
+      });
+      if (!res.ok && isSupabaseConfigured()) {
+        const { data } = await supabase
+          .from('product_variants')
+          .select('stock_quantity')
+          .eq('id', variantId)
+          .maybeSingle();
         if (data) {
           const updatedQty = Math.max(0, data.stock_quantity + quantityChange);
-          await supabase.from('product_variants').update({ stock_quantity: updatedQty }).eq('id', variantId);
+          await supabase
+            .from('product_variants')
+            .update({ stock_quantity: updatedQty })
+            .eq('id', variantId);
         }
-      } catch (err) {
-        console.error('Inventory adjust exception:', err);
       }
+    } catch (err) {
+      console.error('Inventory adjust exception:', err);
     }
   };
 
   // Cart Operations
-  const addToCart = (product: Product, variant: ProductVariant, quantity = 1, customDesign?: CustomDesignData) => {
-    // Ensure product and variant always carry an image URL
-    const fallbackUrl = getFashionFallbackImage(product.name, product.category?.name);
-    const resolvedImgUrl =
+  const addToCart = (
+    product: Product,
+    variant: ProductVariant,
+    quantity = 1,
+    customDesign?: CustomDesignData
+  ) => {
+    const resolvedImgUrl = resolvePublicImageUrl(
       variant.variant_image_url ||
-      product.images?.find((i) => i.is_main)?.url ||
-      product.images?.[0]?.url ||
-      fallbackUrl;
+        product.images?.find((i) => i.is_main)?.url ||
+        product.images?.[0]?.url,
+      product.name,
+      product.category?.name
+    );
 
     const safeVariant: ProductVariant = {
       ...variant,
-      variant_image_url: variant.variant_image_url || resolvedImgUrl,
+      variant_image_url: resolvedImgUrl,
     };
 
     const safeProduct: Product = {
@@ -642,7 +1305,9 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     setCart((prev) => {
       const existingIndex = prev.findIndex(
-        (item) => item.variant.id === safeVariant.id && JSON.stringify(item.custom_design_data) === JSON.stringify(customDesign)
+        (item) =>
+          item.variant.id === safeVariant.id &&
+          JSON.stringify(item.custom_design_data) === JSON.stringify(customDesign)
       );
 
       if (existingIndex > -1) {
@@ -743,10 +1408,9 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       return { success: false, message: 'Your shopping cart is empty.' };
     }
 
-    const orderId = `ord_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const orderId = generateUUID();
     const orderNumber = `FF-${new Date().getFullYear()}-${Math.floor(100000 + Math.random() * 900000)}`;
 
-    // Revalidate cart items and calculate totals
     let subtotal = 0;
     const orderItemsList = cart.map((item) => {
       const price = item.custom_design_data?.total_price
@@ -756,9 +1420,9 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       subtotal += totalItemPrice;
 
       return {
-        id: `oi_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        id: generateUUID(),
         order_id: orderId,
-        variant_id: item.variant.id,
+        variant_id: isValidUUID(item.variant.id) ? item.variant.id : undefined,
         product_name: item.product.name,
         sku: item.variant.sku,
         size: item.variant.size,
@@ -766,12 +1430,14 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         unit_price: price,
         quantity: item.quantity,
         total_price: totalItemPrice,
-        image_url: item.variant.variant_image_url || item.product.images?.find((i) => i.is_main)?.url || item.product.images?.[0]?.url,
+        image_url:
+          item.variant.variant_image_url ||
+          item.product.images?.find((i) => i.is_main)?.url ||
+          item.product.images?.[0]?.url,
         custom_design_data: item.custom_design_data,
       };
     });
 
-    // Discount
     let discountAmount = 0;
     if (appliedCoupon) {
       if (appliedCoupon.discount_type === 'percentage') {
@@ -781,7 +1447,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       }
     }
 
-    const shippingFee = subtotal >= storeSettings.free_shipping_threshold ? 0 : storeSettings.shipping_fee_flat;
+    const shippingFee =
+      subtotal >= storeSettings.free_shipping_threshold ? 0 : storeSettings.shipping_fee_flat;
     const finalTotal = Math.max(0, subtotal - discountAmount + shippingFee);
     const now = new Date().toISOString();
 
@@ -804,10 +1471,13 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       items: orderItemsList,
     };
 
-    // Deduct stock quantity for each purchased variant
     for (const item of cart) {
       if (item.variant.id) {
-        adjustVariantStock(item.variant.id, -item.quantity, `Customer Purchase Order #${orderNumber}`);
+        adjustVariantStock(
+          item.variant.id,
+          -item.quantity,
+          `Customer Purchase Order #${orderNumber}`
+        );
       }
     }
 
@@ -834,7 +1504,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         for (const item of orderItemsList) {
           await supabase.from('order_items').insert({
             order_id: newOrder.id,
-            variant_id: item.variant_id,
+            variant_id: item.variant_id || null,
             product_name: item.product_name,
             sku: item.sku,
             size: item.size,
@@ -854,7 +1524,11 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     return { success: true, orderId, orderNumber };
   };
 
-  const updateOrderStatus = async (orderId: string, status: OrderStatus, trackingNumber?: string) => {
+  const updateOrderStatus = async (
+    orderId: string,
+    status: OrderStatus,
+    trackingNumber?: string
+  ) => {
     setOrders((prev) =>
       prev.map((o) => {
         if (o.id === orderId) {
@@ -865,7 +1539,10 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             updated_at: new Date().toISOString(),
           };
           if (isSupabaseConfigured()) {
-            supabase.from('orders').update({ status, tracking_number: trackingNumber }).eq('id', orderId);
+            supabase
+              .from('orders')
+              .update({ status, tracking_number: trackingNumber })
+              .eq('id', orderId);
           }
           return updated;
         }
@@ -878,7 +1555,11 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setOrders((prev) =>
       prev.map((o) => {
         if (o.id === orderId) {
-          const updated = { ...o, payment_status: paymentStatus, updated_at: new Date().toISOString() };
+          const updated = {
+            ...o,
+            payment_status: paymentStatus,
+            updated_at: new Date().toISOString(),
+          };
           if (isSupabaseConfigured()) {
             supabase.from('orders').update({ payment_status: paymentStatus }).eq('id', orderId);
           }
@@ -890,9 +1571,14 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   // Review
-  const addReview = async (productId: string, rating: number, comment: string, reviewerName: string) => {
+  const addReview = async (
+    productId: string,
+    rating: number,
+    comment: string,
+    reviewerName: string
+  ) => {
     const newReview: Review = {
-      id: `rev_${Date.now()}`,
+      id: generateUUID(),
       product_id: productId,
       reviewer_name: reviewerName,
       rating,
@@ -903,7 +1589,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     setReviews((prev) => [newReview, ...prev]);
 
-    if (isSupabaseConfigured()) {
+    if (isSupabaseConfigured() && isValidUUID(productId)) {
       await supabase.from('reviews').insert(newReview);
     }
   };
@@ -917,9 +1603,14 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   // Contact
-  const sendContactMessage = async (msg: { name: string; email: string; subject?: string; message: string }) => {
+  const sendContactMessage = async (msg: {
+    name: string;
+    email: string;
+    subject?: string;
+    message: string;
+  }) => {
     const newMsg: ContactMessage = {
-      id: `msg_${Date.now()}`,
+      id: generateUUID(),
       name: msg.name,
       email: msg.email,
       subject: msg.subject,
@@ -950,6 +1641,10 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         inventoryLogs,
         appliedCoupon,
         loading,
+        catalogError,
+        unsyncedLocalProducts,
+        refreshCatalog,
+        syncLocalProductsToDatabase,
         saveProduct,
         deleteProduct,
         toggleProductStatus,

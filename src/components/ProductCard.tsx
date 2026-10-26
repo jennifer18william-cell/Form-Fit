@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { Product } from '../types';
 import { useStore } from '../context/StoreContext';
 import { Heart } from 'lucide-react';
-import { getFashionFallbackImage } from '../lib/imageOptimization';
+import { getFashionFallbackImage, resolvePublicImageUrl } from '../lib/imageOptimization';
 
 interface ProductCardProps {
   product: Product;
@@ -15,12 +15,14 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
 
   // Main & hover images
   const fallbackUrl = getFashionFallbackImage(product.name, product.category?.name);
-  const mainImage =
+  const rawMainUrl =
     product.images?.find((i) => i.is_main)?.url ||
     product.images?.[0]?.url ||
-    product.variants?.find((v) => v.variant_image_url)?.variant_image_url ||
-    fallbackUrl;
-  const secondaryImage = product.images?.[1]?.url;
+    product.variants?.find((v) => v.variant_image_url)?.variant_image_url;
+  const mainImage = resolvePublicImageUrl(rawMainUrl, product.name, product.category?.name);
+  const secondaryImage = product.images?.[1]?.url
+    ? resolvePublicImageUrl(product.images[1].url, product.name, product.category?.name)
+    : undefined;
 
   // Available stock
   const totalStock =

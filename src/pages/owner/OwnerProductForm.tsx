@@ -10,6 +10,9 @@ import {
   getFashionFallbackImage,
 } from '../../lib/imageOptimization';
 import {
+  getCategoryCanonicalKey,
+} from '../../lib/categoryMapping';
+import {
   Upload,
   Plus,
   Trash2,
@@ -32,41 +35,54 @@ export const OwnerProductForm: React.FC = () => {
 
   const existingProduct = id ? products.find((p) => p.id === id) : null;
 
+  const matchedPreselectedCat = preselectedCatId
+    ? categories.find(
+        (c) =>
+          c.id === preselectedCatId ||
+          getCategoryCanonicalKey(c.id, categories, c) ===
+            getCategoryCanonicalKey(preselectedCatId, categories)
+      )
+    : undefined;
+
   const initialCatId =
     existingProduct?.category_id ||
-    (preselectedCatId && categories.some((c) => c.id === preselectedCatId)
-      ? preselectedCatId
-      : categories[0]?.id || '');
+    matchedPreselectedCat?.id ||
+    categories[0]?.id ||
+    '';
+
+  const initialCatKey = getCategoryCanonicalKey(initialCatId, categories);
 
   const initialGender: GenderCollection = existingProduct?.gender_collection
     ? existingProduct.gender_collection
-    : initialCatId === 'cat-9-men'
+    : initialCatKey === 'mens-footwear'
     ? 'Men'
-    : initialCatId === 'cat-9-women'
+    : initialCatKey === 'womens-footwear'
     ? 'Women'
-    : initialCatId === 'cat-9'
+    : initialCatKey === 'footwear'
     ? 'Footwear'
     : 'Unisex';
 
   const getDefaultVariantsForCategory = (catId: string): ProductVariant[] => {
-    if (catId === 'cat-9-men' || catId === 'cat-9') {
+    const key = getCategoryCanonicalKey(catId, categories);
+    const seed = Math.floor(1000 + Math.random() * 9000);
+    if (key === 'mens-footwear' || key === 'footwear') {
       return [
-        { id: generateUUID(), product_id: '', sku: 'SKU-UK7', size: 'UK 7', color: 'Ivory', stock_quantity: 10, is_active: true },
-        { id: generateUUID(), product_id: '', sku: 'SKU-UK8', size: 'UK 8', color: 'Ivory', stock_quantity: 15, is_active: true },
-        { id: generateUUID(), product_id: '', sku: 'SKU-UK9', size: 'UK 9', color: 'Ivory', stock_quantity: 15, is_active: true },
+        { id: generateUUID(), product_id: '', sku: `FF-${seed}-UK7`, size: 'UK 7', color: 'Ivory', stock_quantity: 10, is_active: true },
+        { id: generateUUID(), product_id: '', sku: `FF-${seed}-UK8`, size: 'UK 8', color: 'Ivory', stock_quantity: 15, is_active: true },
+        { id: generateUUID(), product_id: '', sku: `FF-${seed}-UK9`, size: 'UK 9', color: 'Ivory', stock_quantity: 15, is_active: true },
       ];
     }
-    if (catId === 'cat-9-women') {
+    if (key === 'womens-footwear') {
       return [
-        { id: generateUUID(), product_id: '', sku: 'SKU-UK5', size: 'UK 5', color: 'Ivory', stock_quantity: 10, is_active: true },
-        { id: generateUUID(), product_id: '', sku: 'SKU-UK6', size: 'UK 6', color: 'Ivory', stock_quantity: 15, is_active: true },
-        { id: generateUUID(), product_id: '', sku: 'SKU-UK7', size: 'UK 7', color: 'Ivory', stock_quantity: 15, is_active: true },
+        { id: generateUUID(), product_id: '', sku: `FF-${seed}-UK5`, size: 'UK 5', color: 'Ivory', stock_quantity: 10, is_active: true },
+        { id: generateUUID(), product_id: '', sku: `FF-${seed}-UK6`, size: 'UK 6', color: 'Ivory', stock_quantity: 15, is_active: true },
+        { id: generateUUID(), product_id: '', sku: `FF-${seed}-UK7`, size: 'UK 7', color: 'Ivory', stock_quantity: 15, is_active: true },
       ];
     }
     return [
-      { id: generateUUID(), product_id: '', sku: 'SKU-S', size: 'S', color: 'Ivory', stock_quantity: 10, is_active: true },
-      { id: generateUUID(), product_id: '', sku: 'SKU-M', size: 'M', color: 'Ivory', stock_quantity: 15, is_active: true },
-      { id: generateUUID(), product_id: '', sku: 'SKU-L', size: 'L', color: 'Ivory', stock_quantity: 20, is_active: true },
+      { id: generateUUID(), product_id: '', sku: `FF-${seed}-S`, size: 'S', color: 'Ivory', stock_quantity: 10, is_active: true },
+      { id: generateUUID(), product_id: '', sku: `FF-${seed}-M`, size: 'M', color: 'Ivory', stock_quantity: 15, is_active: true },
+      { id: generateUUID(), product_id: '', sku: `FF-${seed}-L`, size: 'L', color: 'Ivory', stock_quantity: 20, is_active: true },
     ];
   };
 
@@ -355,9 +371,20 @@ export const OwnerProductForm: React.FC = () => {
       variants: syncedVariants,
     };
 
-    await saveProduct(productPayload);
-    setIsSaving(false);
-    navigate('/owner/products');
+    try {
+      await saveProduct(productPayload);
+      setIsSaving(false);
+      navigate('/owner/products');
+    } catch (err: any) {
+      setIsSaving(false);
+      setUploadFeedback({
+        type: 'error',
+        text:
+          err?.message ||
+          'Database save failed. Product was not published yet—please check your connection or Supabase RLS policies.',
+      });
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
   };
 
   const inputClass =
@@ -842,11 +869,12 @@ export const OwnerProductForm: React.FC = () => {
                     onChange={(e) => {
                       const nextCatId = e.target.value;
                       setCategoryId(nextCatId);
-                      if (nextCatId === 'cat-9-men') {
+                      const nextKey = getCategoryCanonicalKey(nextCatId, categories);
+                      if (nextKey === 'mens-footwear') {
                         setGenderCollection('Men');
-                      } else if (nextCatId === 'cat-9-women') {
+                      } else if (nextKey === 'womens-footwear') {
                         setGenderCollection('Women');
-                      } else if (nextCatId === 'cat-9') {
+                      } else if (nextKey === 'footwear') {
                         setGenderCollection('Footwear');
                       }
                     }}
@@ -856,10 +884,11 @@ export const OwnerProductForm: React.FC = () => {
                       .filter((c) => !c.parent_id)
                       .map((c) => {
                         const subcats = categories.filter((sub) => sub.parent_id === c.id);
+                        const isFw = getCategoryCanonicalKey(c.id, categories, c) === 'footwear';
                         return (
                           <React.Fragment key={c.id}>
                             <option value={c.id}>
-                              {c.id === 'cat-9' ? 'Footwear (Footwear Zone)' : c.name}
+                              {isFw ? 'Footwear (Footwear Zone)' : c.name}
                             </option>
                             {subcats.map((sub) => (
                               <option key={sub.id} value={sub.id}>

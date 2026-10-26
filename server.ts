@@ -3,6 +3,11 @@ import { createServer as createViteServer } from 'vite';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import {
+  handleProductsApi,
+  handleCategoriesApi,
+  handleUploadImageApi,
+} from './api/_lib/catalogBackend';
 
 dotenv.config();
 
@@ -80,7 +85,12 @@ const FALLBACK_FASHION_PHOTOS: Record<string, Array<{ id: string; url: string; a
 async function startServer() {
   const app = express();
 
-  app.use(express.json());
+  app.use(express.json({ limit: '15mb' }));
+
+  // Shared Catalog & Product Photography API Routes (Parity with Vercel /api/*)
+  app.all('/api/products', (req, res) => handleProductsApi(req, res));
+  app.all('/api/categories', (req, res) => handleCategoriesApi(req, res));
+  app.post('/api/upload-image', (req, res) => handleUploadImageApi(req, res));
 
   // API Endpoint: Pexels Fashion Photography Proxy
   app.get('/api/pexels-fashion', async (req, res) => {

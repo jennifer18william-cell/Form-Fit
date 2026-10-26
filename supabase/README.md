@@ -27,20 +27,31 @@ Form & Fit uses **Supabase** for PostgreSQL Database, Auth, Storage (Product Ima
 
 ---
 
-## Step 4: Configure Environment Variables
-In your local `.env` file or hosting environment variables, add:
+## Step 4: Configure Environment Variables (Local & Vercel)
+In your local `.env` file and Vercel **Project Settings -> Environment Variables**, add:
 
 ```env
 VITE_SUPABASE_URL="https://your-project.supabase.co"
 VITE_SUPABASE_ANON_KEY="your-anon-public-key"
+SUPABASE_URL="https://your-project.supabase.co"
+SUPABASE_ANON_KEY="your-anon-public-key"
+# Recommended on Vercel server-side only (never prefix with VITE_):
+SUPABASE_SERVICE_ROLE_KEY="your-service-role-secret-key"
 ```
 
 ---
 
-## Step 5: Provision Initial Owner Account
-To create your store owner account:
-1. Sign up on your Form & Fit app (or via Supabase Auth UI).
-2. Go to Supabase SQL Editor and elevate your profile role:
+## Step 5: Existing Production Database Migration (Fix Public Product Visibility)
+If your Supabase project was created with an earlier schema version, run **`supabase/fix_product_visibility_rls.sql`** in the Supabase SQL Editor. It is 100% idempotent and preserves all existing products, categories, customers, and orders while:
+- Seeding canonical UUID categories (`Men's Fashion`, `Women's Fashion`, `Footwear`, `Men's Footwear`, `Women's Footwear`, `Accessories`, etc.)
+- Auto-provisioning `public.profiles` rows and elevating `admin@formandfit.in` to `owner`
+- Allowing unauthenticated (`anon`) public visitors to read `status = 'published'` products, images, and active variants while hiding `cost_price`, customer data, and orders
+- Making the `product-images` bucket publicly readable for visitor browsers
+
+---
+
+## Step 6: Provision Custom Owner Account (Optional)
+To elevate any additional Supabase Auth account to store owner:
 
 ```sql
 UPDATE public.profiles
@@ -48,10 +59,4 @@ SET role = 'owner'
 WHERE email = 'your-owner-email@example.com';
 ```
 
-Or insert directly into `public.user_roles`:
-```sql
-INSERT INTO public.user_roles (user_id, role)
-SELECT id, 'owner' FROM public.profiles WHERE email = 'your-owner-email@example.com';
-```
-
-Now log into `/owner/login` with your owner credentials to access the complete Owner Admin Dashboard!
+Now log into `/owner/login` with your owner credentials to publish products directly to the shared database!

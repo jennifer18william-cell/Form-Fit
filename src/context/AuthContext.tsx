@@ -1,6 +1,11 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { UserProfile, UserRole } from '../types';
-import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import {
+  supabase,
+  isSupabaseConfigured,
+  setAdminSessionCredentials,
+  clearAdminSessionCredentials,
+} from '../lib/supabase';
 
 interface AuthContextType {
   user: UserProfile | null;
@@ -223,13 +228,77 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const cleanEmail = email.trim().toLowerCase();
     const cleanPasscode = passcode.trim();
 
-    // Check strict master admin credentials OR verified Supabase owner profile
-    const isMasterCredential = (cleanEmail === 'admin@formandfit.in' || cleanEmail === 'owner@formandfit.in') && cleanPasscode === 'FormFit2026!Admin';
+    const isMasterCredential =
+      (cleanEmail === 'admin@formandfit.in' || cleanEmail === 'owner@formandfit.in') &&
+      cleanPasscode === 'FormFit2026!Admin';
+
+    // Always attempt Supabase Auth sign-in when configured so browser obtains a real Supabase JWT for RLS
+    if (isSupabaseConfigured()) {
+      try {
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email: cleanEmail,
+          password: cleanPasscode,
+        });
+
+        if (!error && data.user) {
+          const { data: profileData } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', data.user.id)
+            .maybeSingle();
+
+          const isApprovedRole =
+            isMasterCredential ||
+            (profileData && (profileData.role === 'owner' || profileData.role === 'admin'));
+
+          if (isApprovedRole) {
+            const verifiedOwner: UserProfile = {
+              id: data.user.id,
+              email: profileData?.email || data.user.email || cleanEmail,
+              full_name: profileData?.full_name || 'Store Owner Admin',
+              role: (profileData?.role === 'admin' ? 'admin' : 'owner') as UserRole,
+              created_at: profileData?.created_at || new Date().toISOString(),
+            };
+            if (isMasterCredential) {
+              setAdminSessionCredentials(cleanEmail, cleanPasscode);
+            }
+            setUser(verifiedOwner);
+            localStorage.setItem('form_fit_user_session', JSON.stringify(verifiedOwner));
+            localStorage.setItem('form_fit_owner_mode', 'true');
+            setLoading(false);
+            return { success: true };
+          }
+        } else if (isMasterCredential) {
+          // Provision master owner account in Supabase Auth if not registered yet
+          const { data: signUpData } = await supabase.auth.signUp({
+            email: cleanEmail,
+            password: cleanPasscode,
+            options: {
+              data: { full_name: 'Store Owner Admin', role: 'owner' },
+            },
+          });
+          if (signUpData?.session && signUpData?.user) {
+            await supabase
+              .from('profiles')
+              .upsert({
+                id: signUpData.user.id,
+                email: cleanEmail,
+                full_name: 'Store Owner Admin',
+                role: 'owner',
+              })
+              .then(() => {});
+          }
+        }
+      } catch (err) {
+        console.error('Owner auth check exception:', err);
+      }
+    }
 
     if (isMasterCredential) {
+      setAdminSessionCredentials(cleanEmail, cleanPasscode);
       const ownerProfile: UserProfile = {
         id: 'owner_primary_account',
-        email: 'admin@formandfit.in',
+        email: cleanEmail,
         full_name: 'Store Owner Admin',
         role: 'owner',
         created_at: new Date().toISOString(),
@@ -241,37 +310,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return { success: true };
     }
 
-    // Attempt Supabase owner authentication if configured
-    if (isSupabaseConfigured()) {
-      try {
-        const { data, error } = await supabase.auth.signInWithPassword({ email: cleanEmail, password: cleanPasscode });
-        if (!error && data.user) {
-          const { data: profileData } = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('id', data.user.id)
-            .single();
-
-          if (profileData && (profileData.role === 'owner' || profileData.role === 'admin')) {
-            const verifiedOwner: UserProfile = {
-              id: profileData.id,
-              email: profileData.email,
-              full_name: profileData.full_name || 'Store Owner',
-              role: profileData.role as UserRole,
-              created_at: profileData.created_at,
-            };
-            setUser(verifiedOwner);
-            localStorage.setItem('form_fit_user_session', JSON.stringify(verifiedOwner));
-            localStorage.setItem('form_fit_owner_mode', 'true');
-            setLoading(false);
-            return { success: true };
-          }
-        }
-      } catch (err) {
-        console.error('Owner auth check exception:', err);
-      }
-    }
-
     setLoading(false);
     return {
       success: false,
@@ -280,6 +318,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const setOwnerSession = () => {
+    setAdminSessionCredentials('admin@formandfit.in', 'FormFit2026!Admin');
     const ownerProfile: UserProfile = {
       id: 'owner_primary_account',
       email: 'admin@formandfit.in',
@@ -293,6 +332,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const logout = async () => {
+    clearAdminSessionCredentials();
     if (isSupabaseConfigured()) {
       await supabase.auth.signOut();
     }

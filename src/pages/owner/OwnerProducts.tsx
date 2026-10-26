@@ -2,18 +2,88 @@ import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useStore } from '../../context/StoreContext';
 import { OwnerLayout } from '../../components/OwnerLayout';
-import { PlusCircle, Edit3, Trash2, Search, Package } from 'lucide-react';
-import { getFashionFallbackImage } from '../../lib/imageOptimization';
+import {
+  PlusCircle,
+  Edit3,
+  Trash2,
+  Search,
+  Package,
+  RefreshCw,
+  AlertCircle,
+  CheckCircle2,
+} from 'lucide-react';
+import { getFashionFallbackImage, resolvePublicImageUrl } from '../../lib/imageOptimization';
+import { matchesProductCategoryFilter } from '../../lib/categoryMapping';
 
 export const OwnerProducts: React.FC = () => {
-  const { products, toggleProductStatus, deleteProduct, categories } = useStore();
+  const {
+    products,
+    toggleProductStatus,
+    deleteProduct,
+    categories,
+    unsyncedLocalProducts,
+    syncLocalProductsToDatabase,
+  } = useStore();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('');
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [isSyncingLocal, setIsSyncingLocal] = useState(false);
+  const [actionBanner, setActionBanner] = useState<{
+    type: 'success' | 'error';
+    text: string;
+  } | null>(null);
+
+  const handleSyncLocalProducts = async () => {
+    setIsSyncingLocal(true);
+    setActionBanner(null);
+    const result = await syncLocalProductsToDatabase();
+    setIsSyncingLocal(false);
+    if (result.failed === 0 && result.synced > 0) {
+      setActionBanner({
+        type: 'success',
+        text: `Synced ${result.synced} local product(s) to the live public storefront database.`,
+      });
+    } else if (result.failed > 0) {
+      setActionBanner({
+        type: 'error',
+        text:
+          result.error ||
+          `Could not sync ${result.failed} product(s) to database. Verify your Supabase RLS policies or service role key.`,
+      });
+    }
+  };
+
+  const handleToggleStatus = async (id: string) => {
+    setActionBanner(null);
+    try {
+      await toggleProductStatus(id);
+    } catch (err: any) {
+      setActionBanner({
+        type: 'error',
+        text: err?.message || 'Failed to update publication status in database.',
+      });
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    setActionBanner(null);
+    try {
+      await deleteProduct(id);
+      setConfirmDeleteId(null);
+    } catch (err: any) {
+      setConfirmDeleteId(null);
+      setActionBanner({
+        type: 'error',
+        text: err?.message || 'Failed to delete product from database.',
+      });
+    }
+  };
 
   const filteredProducts = products.filter((p) => {
-    if (selectedCategory && p.category_id !== selectedCategory) return false;
+    if (selectedCategory && !matchesProductCategoryFilter(p, selectedCategory, categories)) {
+      return false;
+    }
     if (selectedStatus && p.status !== selectedStatus) return false;
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
@@ -44,6 +114,48 @@ export const OwnerProducts: React.FC = () => {
             <PlusCircle size={16} /> Create New Product
           </Link>
         </div>
+
+        {unsyncedLocalProducts.length > 0 && (
+          <div className="p-4 bg-[#FFFBEB] border border-[#FDE68A] rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
+            <div className="flex items-start gap-2.5 text-[#92400E]">
+              <AlertCircle size={16} className="shrink-0 mt-0.5 text-[#D97706]" />
+              <div>
+                <p className="font-space font-bold text-[#78350F]">
+                  {unsyncedLocalProducts.length} Browser-Only Product(s) Detected
+                </p>
+                <p className="text-[#92400E] mt-0.5">
+                  These items were saved in this browser before database sync was fixed and are not yet visible to public visitors.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              disabled={isSyncingLocal}
+              onClick={handleSyncLocalProducts}
+              className="px-4 py-2 bg-[#B8F130] hover:bg-[#AAE422] text-[#111111] rounded-lg font-space font-bold text-xs inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-50 whitespace-nowrap shrink-0"
+            >
+              <RefreshCw size={14} className={isSyncingLocal ? 'animate-spin' : ''} />
+              <span>{isSyncingLocal ? 'Syncing...' : 'Sync to Public Storefront'}</span>
+            </button>
+          </div>
+        )}
+
+        {actionBanner && (
+          <div
+            className={`p-3 rounded-lg text-xs font-medium flex items-center gap-2 border ${
+              actionBanner.type === 'success'
+                ? 'bg-[#F0FDF4] border-[#BBF7D0] text-[#166534]'
+                : 'bg-[#FEF2F2] border-[#FECACA] text-[#991B1B]'
+            }`}
+          >
+            {actionBanner.type === 'success' ? (
+              <CheckCircle2 size={16} className="text-[#16A34A] shrink-0" />
+            ) : (
+              <AlertCircle size={16} className="text-[#DC2626] shrink-0" />
+            )}
+            <span>{actionBanner.text}</span>
+          </div>
+        )}
 
         {/* Filters */}
         <div className="bg-white border border-[#E5E4DF] rounded-xl p-4 flex flex-col sm:flex-row gap-3 items-center justify-between text-xs">
@@ -121,7 +233,11 @@ export const OwnerProducts: React.FC = () => {
                   {filteredProducts.map((p) => {
                     const totalStock = p.variants?.reduce((s, v) => s + v.stock_quantity, 0) || 0;
                     const fallbackImg = getFashionFallbackImage(p.name, p.category?.name);
-                    const mainImg = p.images?.find((i) => i.is_main)?.url || p.images?.[0]?.url || fallbackImg;
+                    const mainImg = resolvePublicImageUrl(
+                      p.images?.find((i) => i.is_main)?.url || p.images?.[0]?.url,
+                      p.name,
+                      p.category?.name
+                    );
                     const isConfirming = confirmDeleteId === p.id;
 
                     return (
@@ -166,7 +282,7 @@ export const OwnerProducts: React.FC = () => {
                         <td className="py-3 px-4">
                           <button
                             type="button"
-                            onClick={() => toggleProductStatus(p.id)}
+                            onClick={() => handleToggleStatus(p.id)}
                             className={`px-2.5 py-1 rounded-md text-[11px] font-semibold border transition-colors cursor-pointer whitespace-nowrap ${
                               p.status === 'published'
                                 ? 'bg-[#F4FBE1] text-[#3F6212] border-[#BEF264] hover:bg-[#ECFCCB]'
@@ -181,10 +297,7 @@ export const OwnerProducts: React.FC = () => {
                             <div className="inline-flex items-center justify-end gap-1.5">
                               <button
                                 type="button"
-                                onClick={() => {
-                                  deleteProduct(p.id);
-                                  setConfirmDeleteId(null);
-                                }}
+                                onClick={() => handleDelete(p.id)}
                                 className="px-2.5 py-1 bg-[#DC2626] hover:bg-[#B91C1C] text-white rounded-md text-[11px] font-semibold transition-colors cursor-pointer whitespace-nowrap"
                               >
                                 Delete

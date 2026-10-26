@@ -6,10 +6,10 @@
  * Eliminates browser LocalStorage QuotaExceededError and delivers ultra-fast rendering.
  */
 
-import footwearStudioImg from '../assets/images/footwear_leather_sneakers_studio_1792835303853.jpg';
-import mensFootwearStudioImg from '../assets/images/mens_footwear_studio_poster_1792850976169.jpg';
-import womensFootwearStudioImg from '../assets/images/womens_footwear_studio_poster_1792850976435.jpg';
-import accessoriesStudioImg from '../assets/images/accessories_leather_goods_studio_1792835304388.jpg';
+const footwearStudioImg = '/assets/presets/footwear-studio.jpg';
+const mensFootwearStudioImg = '/assets/presets/mens-footwear-studio.jpg';
+const womensFootwearStudioImg = '/assets/presets/womens-footwear-studio.jpg';
+const accessoriesStudioImg = '/assets/presets/accessories-studio.jpg';
 
 export interface OptimizedImageResult {
   dataUrl: string;
@@ -306,4 +306,37 @@ export function getFashionFallbackImage(productName?: string, categoryName?: str
   }
   // Default to 240 GSM heavy tee
   return FASHION_PRESETS[2].url;
+}
+
+/**
+ * Ensures any product image URL works across all public browsers and incognito sessions.
+ * Resolves dev-mode `/src/assets/...` paths to production-bundled assets and replaces ephemeral `blob:` URLs.
+ */
+export function resolvePublicImageUrl(
+  rawUrl?: string | null,
+  productName?: string,
+  categoryName?: string
+): string {
+  const fallback = getFashionFallbackImage(productName, categoryName);
+  if (!rawUrl || typeof rawUrl !== 'string') return fallback;
+
+  const trimmed = rawUrl.trim();
+  if (!trimmed || trimmed.startsWith('blob:')) {
+    return fallback;
+  }
+
+  if (trimmed.includes('mens_footwear_studio_poster')) {
+    return mensFootwearStudioImg;
+  }
+  if (trimmed.includes('womens_footwear_studio_poster')) {
+    return womensFootwearStudioImg;
+  }
+  if (trimmed.includes('footwear_leather_sneakers_studio')) {
+    return footwearStudioImg;
+  }
+  if (trimmed.includes('accessories_leather_goods_studio')) {
+    return accessoriesStudioImg;
+  }
+
+  return trimmed;
 }
