@@ -26,6 +26,7 @@ import {
 import {
   supabase,
   isSupabaseConfigured,
+  applyRuntimeSupabaseConfig,
   getAdminRequestHeaders,
   getCustomerAuthHeaders,
   subscribeToRealtimeSync,
@@ -459,6 +460,12 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       if (res.ok) {
         const json = await res.json();
         if (json?.success) {
+          if (json.publicSupabaseConfig?.url && json.publicSupabaseConfig?.anonKey) {
+            applyRuntimeSupabaseConfig(
+              json.publicSupabaseConfig.url,
+              json.publicSupabaseConfig.anonKey
+            );
+          }
           if (json.storeSettings) {
             setStoreSettings((prev) => ({ ...prev, ...json.storeSettings }));
           }
@@ -1112,7 +1119,11 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         body: JSON.stringify({ product: fullProduct }),
       });
 
-      const apiJson = await apiRes.json().catch(() => null);
+      const contentType = apiRes.headers.get('content-type') || '';
+      const apiJson = contentType.includes('application/json')
+        ? await apiRes.json().catch(() => null)
+        : null;
+
       if (
         apiRes.ok &&
         apiJson?.success &&
@@ -1122,6 +1133,14 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         savedProduct = normalizeClientProduct(apiJson.product as Product, categories, false);
       } else if (apiJson?.error) {
         apiErrorMsg = apiJson.error;
+      } else if (apiRes.status === 413) {
+        apiErrorMsg =
+          'Product photo file size exceeded server upload limit. Try a smaller image or direct URL.';
+      } else if (!contentType.includes('application/json')) {
+        apiErrorMsg =
+          'This website URL is running an older un-redeployed build without /api/products or VITE_SUPABASE_URL. Refresh AI Studio Preview or redeploy Vercel after saving Environment Variables.';
+      } else if (!apiRes.ok) {
+        apiErrorMsg = `Product API returned HTTP ${apiRes.status}. Please sign out and sign back in at /owner/login.`;
       }
     } catch (err: any) {
       apiErrorMsg = err?.message || '';

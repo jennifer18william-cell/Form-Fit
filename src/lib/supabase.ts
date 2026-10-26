@@ -30,8 +30,8 @@ export function normalizeSupabaseUrl(raw?: string | null): string {
   }
 }
 
-export const supabaseUrl = normalizeSupabaseUrl(import.meta.env.VITE_SUPABASE_URL || '');
-const supabaseAnonKey = cleanEnvString(import.meta.env.VITE_SUPABASE_ANON_KEY || '');
+export let supabaseUrl = normalizeSupabaseUrl(import.meta.env.VITE_SUPABASE_URL || '');
+let supabaseAnonKey = cleanEnvString(import.meta.env.VITE_SUPABASE_ANON_KEY || '');
 
 export const isSupabaseConfigured = (): boolean => {
   return Boolean(
@@ -44,10 +44,8 @@ export const isSupabaseConfigured = (): boolean => {
   );
 };
 
-export const supabase = createClient(
-  supabaseUrl || 'https://placeholder.supabase.co',
-  supabaseAnonKey || 'placeholder-key',
-  {
+function buildBrowserSupabaseClient(url: string, key: string) {
+  return createClient(url || 'https://placeholder.supabase.co', key || 'placeholder-key', {
     auth: {
       persistSession: true,
       autoRefreshToken: true,
@@ -57,27 +55,86 @@ export const supabase = createClient(
         eventsPerSecond: 10,
       },
     },
+  });
+}
+
+let activeSupabaseClient = buildBrowserSupabaseClient(supabaseUrl, supabaseAnonKey);
+
+export const supabase: typeof activeSupabaseClient = new Proxy({} as any, {
+  get(_target, prop) {
+    const val = (activeSupabaseClient as any)[prop];
+    return typeof val === 'function' ? val.bind(activeSupabaseClient) : val;
+  },
+});
+
+export function applyRuntimeSupabaseConfig(rawUrl?: string | null, rawAnonKey?: string | null): boolean {
+  const nextUrl = normalizeSupabaseUrl(rawUrl);
+  const nextKey = cleanEnvString(rawAnonKey);
+  if (
+    !nextUrl ||
+    !nextKey ||
+    nextUrl.includes('placeholder') ||
+    nextUrl.includes('your-project-ref') ||
+    nextKey.includes('YOUR_') ||
+    nextKey === 'placeholder-key'
+  ) {
+    return false;
   }
-);
+
+  if (nextUrl === supabaseUrl && nextKey === supabaseAnonKey) {
+    return false;
+  }
+
+  supabaseUrl = nextUrl;
+  supabaseAnonKey = nextKey;
+  activeSupabaseClient = buildBrowserSupabaseClient(supabaseUrl, supabaseAnonKey);
+
+  if (sharedRealtimeChannel) {
+    try {
+      sharedRealtimeChannel.unsubscribe();
+    } catch {
+      // ignore
+    }
+    sharedRealtimeChannel = null;
+    realtimeInitialized = false;
+  }
+  ensureRealtimeInitialized();
+  return true;
+}
 
 const ADMIN_SESSION_STORAGE_KEY = 'form_fit_admin_session_hdr';
+let memoryAdminCredentials: { email: string; passcode: string } | null = null;
 
 export function setAdminSessionCredentials(email: string, passcode: string) {
+  const payload = {
+    email: email.trim().toLowerCase(),
+    passcode: passcode.trim(),
+  };
+  memoryAdminCredentials = payload;
+  const serialized = JSON.stringify(payload);
   try {
-    sessionStorage.setItem(
-      ADMIN_SESSION_STORAGE_KEY,
-      JSON.stringify({ email: email.trim().toLowerCase(), passcode: passcode.trim() })
-    );
+    sessionStorage.setItem(ADMIN_SESSION_STORAGE_KEY, serialized);
   } catch {
-    // ignore sessionStorage errors
+    // ignore sessionStorage restrictions in cross-origin iframes
+  }
+  try {
+    localStorage.setItem(ADMIN_SESSION_STORAGE_KEY, serialized);
+  } catch {
+    // ignore localStorage restrictions in cross-origin iframes
   }
 }
 
 export function clearAdminSessionCredentials() {
+  memoryAdminCredentials = null;
   try {
     sessionStorage.removeItem(ADMIN_SESSION_STORAGE_KEY);
   } catch {
-    // ignore sessionStorage errors
+    // ignore
+  }
+  try {
+    localStorage.removeItem(ADMIN_SESSION_STORAGE_KEY);
+  } catch {
+    // ignore
   }
 }
 
@@ -104,30 +161,57 @@ export async function getCustomerAuthHeaders(): Promise<Record<string, string>> 
 
 /**
  * Builds authenticated headers for admin API operations (`/api/products`, `/api/categories`, `/api/store`, `/api/upload-image`).
- * Combines Supabase Auth JWT (if signed in) and session-scoped owner credentials.
+ * Combines Supabase Auth JWT (if signed in) and multi-layer owner credentials (memory + sessionStorage + localStorage).
  */
 export async function getAdminRequestHeaders(): Promise<Record<string, string>> {
   const headers = await getCustomerAuthHeaders();
 
+  if (memoryAdminCredentials?.email && memoryAdminCredentials?.passcode) {
+    headers['x-formfit-admin-email'] = memoryAdminCredentials.email;
+    headers['x-formfit-admin-passcode'] = memoryAdminCredentials.passcode;
+    return headers;
+  }
+
+  let storedRaw: string | null = null;
   try {
-    const raw = sessionStorage.getItem(ADMIN_SESSION_STORAGE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
+    storedRaw = sessionStorage.getItem(ADMIN_SESSION_STORAGE_KEY);
+  } catch {
+    // ignore
+  }
+  if (!storedRaw) {
+    try {
+      storedRaw = localStorage.getItem(ADMIN_SESSION_STORAGE_KEY);
+    } catch {
+      // ignore
+    }
+  }
+
+  if (storedRaw) {
+    try {
+      const parsed = JSON.parse(storedRaw);
       if (parsed?.email && parsed?.passcode) {
+        memoryAdminCredentials = { email: parsed.email, passcode: parsed.passcode };
         headers['x-formfit-admin-email'] = parsed.email;
         headers['x-formfit-admin-passcode'] = parsed.passcode;
+        return headers;
       }
-    } else if (localStorage.getItem('form_fit_owner_mode') === 'true') {
+    } catch {
+      // ignore malformed JSON
+    }
+  }
+
+  try {
+    if (localStorage.getItem('form_fit_owner_mode') === 'true') {
       const savedUser = localStorage.getItem('form_fit_user_session');
       if (savedUser) {
         const parsedUser = JSON.parse(savedUser);
-        if (
-          parsedUser?.email === 'admin@formandfit.in' ||
-          parsedUser?.email === 'owner@formandfit.in'
-        ) {
-          headers['x-formfit-admin-email'] = parsedUser.email;
+        if (parsedUser?.email) {
+          headers['x-formfit-admin-email'] = String(parsedUser.email).toLowerCase();
           headers['x-formfit-admin-passcode'] = 'FormFit2026!Admin';
         }
+      } else {
+        headers['x-formfit-admin-email'] = 'admin@formandfit.in';
+        headers['x-formfit-admin-passcode'] = 'FormFit2026!Admin';
       }
     }
   } catch {

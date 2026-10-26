@@ -1981,6 +1981,8 @@ export async function handleStoreApi(req: any, res: any) {
       return res.status(200).json({
         success: true,
         storageMode: 'supabase',
+        publicSupabaseConfig:
+          cfg.url && cfg.anonKey ? { url: cfg.url, anonKey: cfg.anonKey } : null,
         storeSettings: mergedSettings,
         coupons: coupons.length > 0 ? coupons : DEFAULT_COUPONS,
         reviews,
@@ -1989,6 +1991,8 @@ export async function handleStoreApi(req: any, res: any) {
       return res.status(200).json({
         success: true,
         storageMode: 'supabase',
+        publicSupabaseConfig:
+          cfg.url && cfg.anonKey ? { url: cfg.url, anonKey: cfg.anonKey } : null,
         storeSettings: DEFAULT_STORE_SETTINGS,
         coupons: DEFAULT_COUPONS,
         reviews: [],

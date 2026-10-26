@@ -37,13 +37,13 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<UserProfile | null>(() => {
-    const saved = localStorage.getItem('form_fit_user_session');
-    if (saved) {
-      try {
+    try {
+      const saved = localStorage.getItem('form_fit_user_session');
+      if (saved) {
         return JSON.parse(saved);
-      } catch {
-        return null;
       }
+    } catch {
+      return null;
     }
     return null;
   });
