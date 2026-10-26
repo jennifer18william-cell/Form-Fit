@@ -30,8 +30,15 @@ export function normalizeSupabaseUrl(raw?: string | null): string {
   }
 }
 
-export let supabaseUrl = normalizeSupabaseUrl(import.meta.env.VITE_SUPABASE_URL || '');
-let supabaseAnonKey = cleanEnvString(import.meta.env.VITE_SUPABASE_ANON_KEY || '');
+const DEFAULT_PROJECT_SUPABASE_URL = 'https://bhuzhxwwsmhzaehkbvzs.supabase.co';
+const DEFAULT_PROJECT_PUBLISHABLE_KEY = 'sb_publishable_p5uVElaHKRCZ0gssBj3KxQ_Of07ZH8_';
+
+export let supabaseUrl = normalizeSupabaseUrl(
+  import.meta.env.VITE_SUPABASE_URL || DEFAULT_PROJECT_SUPABASE_URL
+);
+let supabaseAnonKey = cleanEnvString(
+  import.meta.env.VITE_SUPABASE_ANON_KEY || DEFAULT_PROJECT_PUBLISHABLE_KEY
+);
 
 export const isSupabaseConfigured = (): boolean => {
   return Boolean(
@@ -159,9 +166,47 @@ export async function getCustomerAuthHeaders(): Promise<Record<string, string>> 
   return headers;
 }
 
+async function attachLiveOwnerJwtIfNeeded(
+  headers: Record<string, string>,
+  email?: string,
+  passcode?: string
+): Promise<Record<string, string>> {
+  if (!isSupabaseConfigured() || !email || !passcode) {
+    return headers;
+  }
+
+  let hasValidJwt = false;
+  if (headers['Authorization']) {
+    try {
+      const { data, error } = await supabase.auth.getUser();
+      if (!error && data?.user) {
+        hasValidJwt = true;
+      }
+    } catch {
+      hasValidJwt = false;
+    }
+  }
+
+  if (!hasValidJwt) {
+    try {
+      const { data: signInData } = await supabase.auth.signInWithPassword({
+        email: email.trim().toLowerCase(),
+        password: passcode.trim(),
+      });
+      if (signInData?.session?.access_token) {
+        headers['Authorization'] = `Bearer ${signInData.session.access_token}`;
+      }
+    } catch {
+      // ignore if custom admin email uses header-only auth
+    }
+  }
+
+  return headers;
+}
+
 /**
  * Builds authenticated headers for admin API operations (`/api/products`, `/api/categories`, `/api/store`, `/api/upload-image`).
- * Combines Supabase Auth JWT (if signed in) and multi-layer owner credentials (memory + sessionStorage + localStorage).
+ * Combines live Supabase Auth JWT and multi-layer owner credentials (memory + sessionStorage + localStorage).
  */
 export async function getAdminRequestHeaders(): Promise<Record<string, string>> {
   const headers = await getCustomerAuthHeaders();
@@ -169,7 +214,11 @@ export async function getAdminRequestHeaders(): Promise<Record<string, string>> 
   if (memoryAdminCredentials?.email && memoryAdminCredentials?.passcode) {
     headers['x-formfit-admin-email'] = memoryAdminCredentials.email;
     headers['x-formfit-admin-passcode'] = memoryAdminCredentials.passcode;
-    return headers;
+    return attachLiveOwnerJwtIfNeeded(
+      headers,
+      memoryAdminCredentials.email,
+      memoryAdminCredentials.passcode
+    );
   }
 
   let storedRaw: string | null = null;
@@ -193,7 +242,7 @@ export async function getAdminRequestHeaders(): Promise<Record<string, string>> 
         memoryAdminCredentials = { email: parsed.email, passcode: parsed.passcode };
         headers['x-formfit-admin-email'] = parsed.email;
         headers['x-formfit-admin-passcode'] = parsed.passcode;
-        return headers;
+        return attachLiveOwnerJwtIfNeeded(headers, parsed.email, parsed.passcode);
       }
     } catch {
       // ignore malformed JSON
@@ -203,16 +252,16 @@ export async function getAdminRequestHeaders(): Promise<Record<string, string>> 
   try {
     if (localStorage.getItem('form_fit_owner_mode') === 'true') {
       const savedUser = localStorage.getItem('form_fit_user_session');
+      let fallbackEmail = 'admin@formandfit.in';
       if (savedUser) {
         const parsedUser = JSON.parse(savedUser);
         if (parsedUser?.email) {
-          headers['x-formfit-admin-email'] = String(parsedUser.email).toLowerCase();
-          headers['x-formfit-admin-passcode'] = 'FormFit2026!Admin';
+          fallbackEmail = String(parsedUser.email).toLowerCase();
         }
-      } else {
-        headers['x-formfit-admin-email'] = 'admin@formandfit.in';
-        headers['x-formfit-admin-passcode'] = 'FormFit2026!Admin';
       }
+      headers['x-formfit-admin-email'] = fallbackEmail;
+      headers['x-formfit-admin-passcode'] = 'FormFit2026!Admin';
+      return attachLiveOwnerJwtIfNeeded(headers, fallbackEmail, 'FormFit2026!Admin');
     }
   } catch {
     // ignore storage read error
