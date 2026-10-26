@@ -1,7 +1,9 @@
 {
   "name": "Form \u0026 Fit website",
   "description": "Owner-managed online fashion e-commerce platform and custom apparel studio.",
-  "requestFramePermissions": [],
+  "requestFramePermissions": [
+    "camera"
+  ],
   "majorCapabilities": [
     "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
   ]

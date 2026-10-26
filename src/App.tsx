@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { StoreProvider } from './context/StoreContext';
 import { Navbar } from './components/Navbar';
@@ -30,6 +30,15 @@ import { OwnerSettings } from './pages/owner/OwnerSettings';
 
 import { AnimatedBackground } from './components/AnimatedBackground';
 import { MobileBottomNav } from './components/MobileBottomNav';
+import { AiFashionStylist } from './components/AiFashionStylist';
+
+const CustomerStylistHost: React.FC = () => {
+  const location = useLocation();
+  if (location.pathname.startsWith('/owner')) {
+    return null;
+  }
+  return <AiFashionStylist />;
+};
 
 // Owner Guard
 const OwnerRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -140,6 +149,7 @@ export default function App() {
             {/* Fallback */}
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
+          <CustomerStylistHost />
         </StoreProvider>
       </AuthProvider>
     </BrowserRouter>

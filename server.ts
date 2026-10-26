@@ -11,6 +11,7 @@ import {
   handleAuthApi,
   handleStoreApi,
 } from './api/_lib/catalogBackend';
+import { handleStylistApi } from './api/_lib/stylistBackend';
 
 dotenv.config();
 
@@ -96,6 +97,7 @@ async function startServer() {
   app.post('/api/upload-image', (req, res) => handleUploadImageApi(req, res));
   app.post('/api/auth', (req, res) => handleAuthApi(req, res));
   app.all('/api/store', (req, res) => handleStoreApi(req, res));
+  app.all('/api/stylist', (req, res) => handleStylistApi(req, res));
 
   // API Endpoint: Pexels Fashion Photography Proxy
   app.get('/api/pexels-fashion', async (req, res) => {
