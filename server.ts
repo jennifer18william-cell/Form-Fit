@@ -7,6 +7,8 @@ import {
   handleProductsApi,
   handleCategoriesApi,
   handleUploadImageApi,
+  handleAuthApi,
+  handleStoreApi,
 } from './api/_lib/catalogBackend';
 
 dotenv.config();
@@ -87,10 +89,12 @@ async function startServer() {
 
   app.use(express.json({ limit: '15mb' }));
 
-  // Shared Catalog & Product Photography API Routes (Parity with Vercel /api/*)
+  // Shared Catalog, Auth, Store & Product Photography API Routes (Parity with Vercel /api/*)
   app.all('/api/products', (req, res) => handleProductsApi(req, res));
   app.all('/api/categories', (req, res) => handleCategoriesApi(req, res));
   app.post('/api/upload-image', (req, res) => handleUploadImageApi(req, res));
+  app.post('/api/auth', (req, res) => handleAuthApi(req, res));
+  app.all('/api/store', (req, res) => handleStoreApi(req, res));
 
   // API Endpoint: Pexels Fashion Photography Proxy
   app.get('/api/pexels-fashion', async (req, res) => {

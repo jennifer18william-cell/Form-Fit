@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { useNavigate, useSearchParams, Link } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useSearchParams, useLocation, Link, Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -18,10 +18,22 @@ import {
 export const CustomerAuth: React.FC = () => {
   const { signInWithPassword, signUp, user } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
 
-  const initialMode = searchParams.get('mode') === 'register' ? 'register' : 'signin';
+  const initialMode =
+    location.pathname === '/register' || searchParams.get('mode') === 'register'
+      ? 'register'
+      : 'signin';
   const [mode, setMode] = useState<'signin' | 'register'>(initialMode);
+
+  useEffect(() => {
+    if (location.pathname === '/register' || searchParams.get('mode') === 'register') {
+      setMode('register');
+    } else if (location.pathname === '/login' && !searchParams.get('mode')) {
+      setMode('signin');
+    }
+  }, [location.pathname, searchParams]);
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -35,7 +47,7 @@ export const CustomerAuth: React.FC = () => {
   const [banner, setBanner] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   if (user) {
-    navigate('/account');
+    return <Navigate to="/account" replace />;
   }
 
   const getPasswordStrength = (pass: string) => {

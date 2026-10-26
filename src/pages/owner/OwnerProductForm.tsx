@@ -52,15 +52,18 @@ export const OwnerProductForm: React.FC = () => {
 
   const initialCatKey = getCategoryCanonicalKey(initialCatId, categories);
 
+  const deriveGenderForCategoryKey = (key: string): GenderCollection => {
+    if (key === 'mens-fashion' || key === 'mens-footwear') return 'Men';
+    if (key === 'womens-fashion' || key === 'womens-footwear' || key === 'dresses-coords') return 'Women';
+    if (key === 'footwear') return 'Footwear';
+    if (key === 'accessories') return 'Accessories';
+    if (key === 'custom-apparel') return 'Custom Apparel';
+    return 'Unisex';
+  };
+
   const initialGender: GenderCollection = existingProduct?.gender_collection
     ? existingProduct.gender_collection
-    : initialCatKey === 'mens-footwear'
-    ? 'Men'
-    : initialCatKey === 'womens-footwear'
-    ? 'Women'
-    : initialCatKey === 'footwear'
-    ? 'Footwear'
-    : 'Unisex';
+    : deriveGenderForCategoryKey(initialCatKey);
 
   const getDefaultVariantsForCategory = (catId: string): ProductVariant[] => {
     const key = getCategoryCanonicalKey(catId, categories);
@@ -119,7 +122,7 @@ export const OwnerProductForm: React.FC = () => {
   const [isDragOver, setIsDragOver] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
-  // Sync state if existingProduct loads asynchronously
+  // Sync state if existingProduct or Supabase categories load asynchronously
   useEffect(() => {
     if (existingProduct) {
       setName(existingProduct.name || '');
@@ -127,7 +130,14 @@ export const OwnerProductForm: React.FC = () => {
       setSku(existingProduct.sku || '');
       setShortDesc(existingProduct.short_desc || '');
       setDescription(existingProduct.description || '');
-      setCategoryId(existingProduct.category_id || categories[0]?.id || '');
+      const matchedCat =
+        categories.find(
+          (c) =>
+            c.id === existingProduct.category_id ||
+            getCategoryCanonicalKey(c.id, categories, c) ===
+              getCategoryCanonicalKey(existingProduct.category_id, categories, existingProduct.category)
+        ) || categories[0];
+      setCategoryId(matchedCat?.id || existingProduct.category_id || '');
       setGenderCollection(existingProduct.gender_collection || 'Unisex');
       setRegularPrice(existingProduct.regular_price || 999);
       setSalePrice(existingProduct.sale_price);
@@ -145,8 +155,24 @@ export const OwnerProductForm: React.FC = () => {
       if (existingProduct.variants && existingProduct.variants.length > 0) {
         setVariants(existingProduct.variants);
       }
+    } else if (categories.length > 0) {
+      // Ensure new product form `categoryId` resolves to the live UUID in `categories`
+      const directMatch = categories.find((c) => c.id === categoryId);
+      if (!directMatch) {
+        const keyToFind = getCategoryCanonicalKey(preselectedCatId || categoryId, categories);
+        const byCanonical = categories.find(
+          (c) => getCategoryCanonicalKey(c.id, categories, c) === keyToFind
+        );
+        const resolvedId = byCanonical?.id || categories[0].id;
+        setCategoryId(resolvedId);
+        if (preselectedCatId) {
+          setGenderCollection(
+            deriveGenderForCategoryKey(getCategoryCanonicalKey(resolvedId, categories))
+          );
+        }
+      }
     }
-  }, [existingProduct, categories]);
+  }, [existingProduct, categories, preselectedCatId]);
 
   // Auto slug generation from name
   const handleNameChange = (val: string) => {
@@ -870,12 +896,20 @@ export const OwnerProductForm: React.FC = () => {
                       const nextCatId = e.target.value;
                       setCategoryId(nextCatId);
                       const nextKey = getCategoryCanonicalKey(nextCatId, categories);
-                      if (nextKey === 'mens-footwear') {
-                        setGenderCollection('Men');
-                      } else if (nextKey === 'womens-footwear') {
-                        setGenderCollection('Women');
-                      } else if (nextKey === 'footwear') {
-                        setGenderCollection('Footwear');
+                      if (
+                        [
+                          'mens-fashion',
+                          'mens-footwear',
+                          'womens-fashion',
+                          'womens-footwear',
+                          'dresses-coords',
+                          'footwear',
+                          'accessories',
+                          'custom-apparel',
+                          'unisex',
+                        ].includes(nextKey)
+                      ) {
+                        setGenderCollection(deriveGenderForCategoryKey(nextKey));
                       }
                     }}
                     className={`${inputClass} cursor-pointer`}

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useStore } from '../context/StoreContext';
 import { useAuth } from '../context/AuthContext';
@@ -21,7 +21,7 @@ import {
 
 export const CustomerAccount: React.FC = () => {
   const { id: orderNumberParam } = useParams<{ id?: string }>();
-  const { orders, wishlist } = useStore();
+  const { orders, wishlist, addresses, saveAddress } = useStore();
   const { user, logout, updateProfile, isOwner } = useAuth();
 
   const [activeTab, setActiveTab] = useState<'orders' | 'profile' | 'addresses' | 'wishlist'>(
@@ -32,18 +32,13 @@ export const CustomerAccount: React.FC = () => {
   const [phone, setPhone] = useState(user?.phone || '');
   const [profileMessage, setProfileMessage] = useState<string | null>(null);
 
-  const [savedAddresses, setSavedAddresses] = useState<ShippingAddress[]>([
-    {
-      full_name: user?.full_name || 'Valued Member',
-      phone: user?.phone || '+91 98765 43210',
-      line1: 'Flat 402, Sunshine Heights',
-      line2: 'Bandra West',
-      city: 'Mumbai',
-      state: 'Maharashtra',
-      postal_code: '400050',
-      country: 'India',
-    },
-  ]);
+  useEffect(() => {
+    if (user) {
+      setFullName(user.full_name || '');
+      setPhone(user.phone || '');
+    }
+  }, [user]);
+
   const [showAddressForm, setShowAddressForm] = useState(false);
   const [newAddress, setNewAddress] = useState<ShippingAddress>({
     full_name: user?.full_name || '',
@@ -76,10 +71,10 @@ export const CustomerAccount: React.FC = () => {
     setTimeout(() => setProfileMessage(null), 3000);
   };
 
-  const handleAddAddress = (e: React.FormEvent) => {
+  const handleAddAddress = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newAddress.line1 || !newAddress.city || !newAddress.postal_code) return;
-    setSavedAddresses((prev) => [...prev, newAddress]);
+    await saveAddress(newAddress);
     setShowAddressForm(false);
     setNewAddress({
       full_name: user.full_name || '',
@@ -617,32 +612,42 @@ export const CustomerAccount: React.FC = () => {
                   </form>
                 )}
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {savedAddresses.map((addr, idx) => (
-                    <div
-                      key={idx}
-                      className="p-4 bg-[#FAF9F6] border border-[#E5E4DF] rounded-lg space-y-1 text-xs text-[#52525B]"
-                    >
-                      <div className="flex justify-between items-start">
-                        <span className="font-space font-semibold text-sm text-[#18181B]">
-                          {addr.full_name}
-                        </span>
-                        {idx === 0 && (
-                          <span className="text-[#4D7C0F] font-semibold text-[11px]">
-                            Default
+                {addresses.length === 0 ? (
+                  <div className="text-center py-10 space-y-2 text-xs text-[#64748B]">
+                    <MapPin size={32} className="mx-auto text-[#94A3B8]" />
+                    <p className="font-space font-semibold text-sm text-[#18181B]">
+                      No Saved Addresses Yet
+                    </p>
+                    <p>Add a delivery address above for faster checkout.</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {addresses.map((addr, idx) => (
+                      <div
+                        key={idx}
+                        className="p-4 bg-[#FAF9F6] border border-[#E5E4DF] rounded-lg space-y-1 text-xs text-[#52525B]"
+                      >
+                        <div className="flex justify-between items-start">
+                          <span className="font-space font-semibold text-sm text-[#18181B]">
+                            {addr.full_name}
                           </span>
-                        )}
+                          {idx === 0 && (
+                            <span className="text-[#4D7C0F] font-semibold text-[11px]">
+                              Default
+                            </span>
+                          )}
+                        </div>
+                        <p>{addr.line1}</p>
+                        {addr.line2 && <p>{addr.line2}</p>}
+                        <p>
+                          {addr.city}, {addr.state} -{' '}
+                          <span className="font-mono">{addr.postal_code}</span>
+                        </p>
+                        <p className="font-mono text-[#64748B] pt-1">Phone: {addr.phone}</p>
                       </div>
-                      <p>{addr.line1}</p>
-                      {addr.line2 && <p>{addr.line2}</p>}
-                      <p>
-                        {addr.city}, {addr.state} -{' '}
-                        <span className="font-mono">{addr.postal_code}</span>
-                      </p>
-                      <p className="font-mono text-[#64748B] pt-1">Phone: {addr.phone}</p>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                )}
               </motion.div>
             )}
 

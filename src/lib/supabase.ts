@@ -1,14 +1,44 @@
-import { createClient } from '@supabase/supabase-js';
+import { createClient, RealtimeChannel } from '@supabase/supabase-js';
 import { optimizeImage } from './imageOptimization';
 
-const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL || '').trim();
-const supabaseAnonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY || '').trim();
+export function cleanEnvString(val?: string | null): string {
+  if (!val) return '';
+  return String(val).trim().replace(/^["']+|["']+$/g, '').trim();
+}
+
+/**
+ * Ensures any pasted Supabase Data API URL (e.g. `https://<ref>.supabase.co/rest/v1/`)
+ * or Dashboard URL (`https://supabase.com/dashboard/project/<ref>`) resolves cleanly
+ * to `https://<ref>.supabase.co` so REST, Auth, Storage, and Realtime WebSockets all succeed.
+ */
+export function normalizeSupabaseUrl(raw?: string | null): string {
+  const cleaned = cleanEnvString(raw);
+  if (!cleaned) return '';
+
+  const dashboardMatch = cleaned.match(/supabase\.com\/dashboard\/project\/([a-z0-9]+)/i);
+  if (dashboardMatch?.[1]) {
+    return `https://${dashboardMatch[1]}.supabase.co`;
+  }
+
+  try {
+    const parsed = new URL(cleaned.startsWith('http') ? cleaned : `https://${cleaned}`);
+    return parsed.origin;
+  } catch {
+    return cleaned
+      .replace(/\/(rest|auth|storage|realtime)\/v1\/?.*$/i, '')
+      .replace(/\/+$/, '');
+  }
+}
+
+export const supabaseUrl = normalizeSupabaseUrl(import.meta.env.VITE_SUPABASE_URL || '');
+const supabaseAnonKey = cleanEnvString(import.meta.env.VITE_SUPABASE_ANON_KEY || '');
 
 export const isSupabaseConfigured = (): boolean => {
   return Boolean(
     supabaseUrl &&
       supabaseAnonKey &&
       !supabaseUrl.includes('placeholder') &&
+      !supabaseUrl.includes('your-project-ref') &&
       !supabaseAnonKey.includes('YOUR_') &&
       supabaseAnonKey !== 'placeholder-key'
   );
@@ -21,6 +51,11 @@ export const supabase = createClient(
     auth: {
       persistSession: true,
       autoRefreshToken: true,
+    },
+    realtime: {
+      params: {
+        eventsPerSecond: 10,
+      },
     },
   }
 );
@@ -46,11 +81,7 @@ export function clearAdminSessionCredentials() {
   }
 }
 
-/**
- * Builds authenticated headers for admin API operations (`/api/products`, `/api/categories`, `/api/upload-image`).
- * Combines Supabase Auth JWT (if signed in) and session-scoped owner credentials.
- */
-export async function getAdminRequestHeaders(): Promise<Record<string, string>> {
+export async function getCustomerAuthHeaders(): Promise<Record<string, string>> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
   };
@@ -68,6 +99,16 @@ export async function getAdminRequestHeaders(): Promise<Record<string, string>> 
     }
   }
 
+  return headers;
+}
+
+/**
+ * Builds authenticated headers for admin API operations (`/api/products`, `/api/categories`, `/api/store`, `/api/upload-image`).
+ * Combines Supabase Auth JWT (if signed in) and session-scoped owner credentials.
+ */
+export async function getAdminRequestHeaders(): Promise<Record<string, string>> {
+  const headers = await getCustomerAuthHeaders();
+
   try {
     const raw = sessionStorage.getItem(ADMIN_SESSION_STORAGE_KEY);
     if (raw) {
@@ -77,14 +118,12 @@ export async function getAdminRequestHeaders(): Promise<Record<string, string>> 
         headers['x-formfit-admin-passcode'] = parsed.passcode;
       }
     } else if (localStorage.getItem('form_fit_owner_mode') === 'true') {
-      // Support seamless recovery if owner logged in via master mode earlier in the same browser
       const savedUser = localStorage.getItem('form_fit_user_session');
       if (savedUser) {
         const parsedUser = JSON.parse(savedUser);
         if (
-          parsedUser?.id === 'owner_primary_account' &&
-          (parsedUser?.email === 'admin@formandfit.in' ||
-            parsedUser?.email === 'owner@formandfit.in')
+          parsedUser?.email === 'admin@formandfit.in' ||
+          parsedUser?.email === 'owner@formandfit.in'
         ) {
           headers['x-formfit-admin-email'] = parsedUser.email;
           headers['x-formfit-admin-passcode'] = 'FormFit2026!Admin';
@@ -96,6 +135,122 @@ export async function getAdminRequestHeaders(): Promise<Record<string, string>> 
   }
 
   return headers;
+}
+
+// ============================================================================
+// Real-Time Storefront & Admin Synchronization Bus
+// Combines Supabase Realtime (`postgres_changes` + global WebSocket `broadcast`)
+// and local `BroadcastChannel` for instant updates across all visitors & tabs.
+// ============================================================================
+
+export type RealtimeTopic = 'catalog' | 'categories' | 'settings' | 'orders' | 'coupons' | 'all';
+
+type SyncListener = (topic: RealtimeTopic) => void;
+
+const syncListeners = new Set<SyncListener>();
+let sharedRealtimeChannel: RealtimeChannel | null = null;
+let sharedBroadcastChannel: BroadcastChannel | null = null;
+let realtimeInitialized = false;
+
+function notifyListeners(topic: RealtimeTopic) {
+  syncListeners.forEach((fn) => {
+    try {
+      fn(topic);
+    } catch (err) {
+      console.warn('Realtime listener error:', err);
+    }
+  });
+}
+
+function ensureRealtimeInitialized() {
+  if (realtimeInitialized || typeof window === 'undefined') return;
+  realtimeInitialized = true;
+
+  // 1. Same-browser cross-tab instant BroadcastChannel
+  if ('BroadcastChannel' in window) {
+    try {
+      sharedBroadcastChannel = new BroadcastChannel('form_fit_realtime_bus');
+      sharedBroadcastChannel.onmessage = (event) => {
+        const topic = (event?.data?.topic as RealtimeTopic) || 'all';
+        notifyListeners(topic);
+      };
+    } catch {
+      // ignore BroadcastChannel restrictions
+    }
+  }
+
+  // 2. Cross-device / cross-visitor Supabase Realtime WebSocket channel
+  if (isSupabaseConfigured()) {
+    try {
+      const channel = supabase.channel('form-fit-global-sync', {
+        config: {
+          broadcast: { self: false },
+        },
+      });
+
+      channel
+        .on('broadcast', { event: 'store_sync' }, (payload) => {
+          const topic = (payload?.payload?.topic as RealtimeTopic) || 'all';
+          notifyListeners(topic);
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, () => {
+          notifyListeners('catalog');
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'product_images' }, () => {
+          notifyListeners('catalog');
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'product_variants' }, () => {
+          notifyListeners('catalog');
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'categories' }, () => {
+          notifyListeners('categories');
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'store_settings' }, () => {
+          notifyListeners('settings');
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'coupons' }, () => {
+          notifyListeners('coupons');
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => {
+          notifyListeners('orders');
+        })
+        .subscribe();
+
+      sharedRealtimeChannel = channel;
+    } catch (err) {
+      console.warn('Supabase Realtime subscription warning:', err);
+    }
+  }
+}
+
+export function subscribeToRealtimeSync(listener: SyncListener): () => void {
+  ensureRealtimeInitialized();
+  syncListeners.add(listener);
+  return () => {
+    syncListeners.delete(listener);
+  };
+}
+
+export async function broadcastRealtimeSync(topic: RealtimeTopic = 'all'): Promise<void> {
+  ensureRealtimeInitialized();
+
+  try {
+    sharedBroadcastChannel?.postMessage({ topic, ts: Date.now() });
+  } catch {
+    // ignore
+  }
+
+  if (sharedRealtimeChannel && isSupabaseConfigured()) {
+    try {
+      await sharedRealtimeChannel.send({
+        type: 'broadcast',
+        event: 'store_sync',
+        payload: { topic, ts: Date.now() },
+      });
+    } catch {
+      // ignore transient socket broadcast errors
+    }
+  }
 }
 
 export interface UploadResult {

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useStore } from '../../context/StoreContext';
 import { OwnerLayout } from '../../components/OwnerLayout';
 import { isSupabaseConfigured } from '../../lib/supabase';
@@ -17,6 +17,19 @@ export const OwnerSettings: React.FC = () => {
   const [shippingFeeFlat, setShippingFeeFlat] = useState(storeSettings.shipping_fee_flat);
   const [freeShippingThreshold, setFreeShippingThreshold] = useState(storeSettings.free_shipping_threshold);
   const [codEnabled, setCodEnabled] = useState(storeSettings.cod_enabled);
+
+  useEffect(() => {
+    setAnnouncementText(storeSettings.announcement_text || '');
+    setAnnouncementEnabled(storeSettings.announcement_enabled);
+    setHeroHeadline(storeSettings.hero_headline || '');
+    setHeroSubtitle(storeSettings.hero_subtitle || '');
+    setHeroImageUrl(storeSettings.hero_image_url || '');
+    setContactEmail(storeSettings.contact_email || '');
+    setContactPhone(storeSettings.contact_phone || '');
+    setShippingFeeFlat(storeSettings.shipping_fee_flat);
+    setFreeShippingThreshold(storeSettings.free_shipping_threshold);
+    setCodEnabled(storeSettings.cod_enabled);
+  }, [storeSettings]);
 
   const [savedSuccess, setSavedSuccess] = useState(false);
 

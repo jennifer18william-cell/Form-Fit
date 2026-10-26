@@ -1,10 +1,11 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { UserProfile, UserRole } from '../types';
 import {
   supabase,
   isSupabaseConfigured,
   setAdminSessionCredentials,
   clearAdminSessionCredentials,
+  getCustomerAuthHeaders,
 } from '../lib/supabase';
 
 interface AuthContextType {
@@ -13,9 +14,20 @@ interface AuthContextType {
   isOwner: boolean;
   isAdmin: boolean;
   login: (email: string, role?: UserRole) => Promise<{ success: boolean; message?: string }>;
-  signUp: (email: string, password: string, fullName: string, phone?: string) => Promise<{ success: boolean; message?: string }>;
-  signInWithPassword: (email: string, password: string) => Promise<{ success: boolean; message?: string }>;
-  authenticateOwner: (email: string, passcode: string) => Promise<{ success: boolean; message?: string }>;
+  signUp: (
+    email: string,
+    password: string,
+    fullName: string,
+    phone?: string
+  ) => Promise<{ success: boolean; message?: string }>;
+  signInWithPassword: (
+    email: string,
+    password: string
+  ) => Promise<{ success: boolean; message?: string }>;
+  authenticateOwner: (
+    email: string,
+    passcode: string
+  ) => Promise<{ success: boolean; message?: string }>;
   logout: () => Promise<void>;
   updateProfile: (data: Partial<UserProfile>) => Promise<void>;
   setOwnerSession: () => void;
@@ -38,19 +50,99 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const [loading, setLoading] = useState<boolean>(true);
 
+  const syncServerProfile = useCallback(
+    async (
+      accessToken: string,
+      fallbackUser: { id: string; email: string; full_name?: string; phone?: string }
+    ): Promise<UserProfile> => {
+      try {
+        const res = await fetch('/api/auth', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${accessToken}`,
+          },
+          body: JSON.stringify({
+            action: 'sync-profile',
+            full_name: fallbackUser.full_name,
+            phone: fallbackUser.phone,
+          }),
+        });
+        if (res.ok) {
+          const json = await res.json();
+          if (json?.success && json?.profile) {
+            const synced: UserProfile = {
+              id: json.profile.id,
+              email: json.profile.email || fallbackUser.email,
+              full_name: json.profile.full_name,
+              phone: json.profile.phone,
+              role: (json.profile.role as UserRole) || 'customer',
+              created_at: json.profile.created_at || new Date().toISOString(),
+            };
+            setUser(synced);
+            localStorage.setItem('form_fit_user_session', JSON.stringify(synced));
+            return synced;
+          }
+        }
+      } catch {
+        // Fall through to direct Supabase query below
+      }
+
+      const { data } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', fallbackUser.id)
+        .maybeSingle();
+
+      const profile: UserProfile = data
+        ? {
+            id: data.id,
+            email: data.email || fallbackUser.email,
+            full_name: data.full_name || fallbackUser.full_name,
+            phone: data.phone || fallbackUser.phone,
+            role: (data.role as UserRole) || 'customer',
+            created_at: data.created_at,
+          }
+        : {
+            id: fallbackUser.id,
+            email: fallbackUser.email,
+            full_name: fallbackUser.full_name,
+            phone: fallbackUser.phone,
+            role: 'customer',
+            created_at: new Date().toISOString(),
+          };
+
+      setUser(profile);
+      localStorage.setItem('form_fit_user_session', JSON.stringify(profile));
+      return profile;
+    },
+    []
+  );
+
   useEffect(() => {
     if (isSupabaseConfigured()) {
-      supabase.auth.getSession().then(({ data: { session } }) => {
+      supabase.auth.getSession().then(async ({ data: { session } }) => {
         if (session?.user) {
-          fetchUserProfile(session.user.id, session.user.email || '');
-        } else {
-          setLoading(false);
+          await syncServerProfile(session.user.id ? session.access_token : '', {
+            id: session.user.id,
+            email: session.user.email || '',
+            full_name: session.user.user_metadata?.full_name,
+            phone: session.user.user_metadata?.phone,
+          });
         }
+        setLoading(false);
       });
 
-      const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      const {
+        data: { subscription },
+      } = supabase.auth.onAuthStateChange((_event, session) => {
         if (session?.user) {
-          fetchUserProfile(session.user.id, session.user.email || '');
+          syncServerProfile(session.access_token, {
+            id: session.user.id,
+            email: session.user.email || '',
+            full_name: session.user.user_metadata?.full_name,
+            phone: session.user.user_metadata?.phone,
+          }).finally(() => setLoading(false));
         } else {
           if (!localStorage.getItem('form_fit_owner_mode')) {
             setUser(null);
@@ -64,55 +156,83 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } else {
       setLoading(false);
     }
-  }, []);
-
-  const fetchUserProfile = async (userId: string, email: string) => {
-    try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .single();
-
-      if (data) {
-        const profile: UserProfile = {
-          id: data.id,
-          email: data.email || email,
-          full_name: data.full_name,
-          phone: data.phone,
-          role: (data.role as UserRole) || 'customer',
-          created_at: data.created_at,
-        };
-        setUser(profile);
-        localStorage.setItem('form_fit_user_session', JSON.stringify(profile));
-      } else {
-        const newProfile: UserProfile = {
-          id: userId,
-          email: email,
-          role: 'customer',
-          created_at: new Date().toISOString(),
-        };
-        setUser(newProfile);
-        localStorage.setItem('form_fit_user_session', JSON.stringify(newProfile));
-      }
-    } catch (err) {
-      console.error('Profile fetch exception:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
+  }, [syncServerProfile]);
 
   const signUp = async (email: string, password: string, fullName: string, phone?: string) => {
     setLoading(true);
+    const cleanEmail = email.trim().toLowerCase();
     try {
+      // 1. Register via server `/api/auth` so account is confirmed in `auth.users` & stored in `public.profiles`
+      try {
+        const apiRes = await fetch('/api/auth', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'register',
+            email: cleanEmail,
+            password,
+            fullName: fullName.trim(),
+            phone: phone?.trim() || '',
+          }),
+        });
+
+        const apiJson = await apiRes.json().catch(() => null);
+        if (!apiRes.ok && apiJson?.error) {
+          setLoading(false);
+          return { success: false, message: apiJson.error };
+        }
+
+        if (apiRes.ok && apiJson?.success) {
+          if (isSupabaseConfigured()) {
+            const { data: signInData } = await supabase.auth.signInWithPassword({
+              email: cleanEmail,
+              password,
+            });
+            if (signInData?.session?.access_token && signInData.user) {
+              await syncServerProfile(signInData.session.access_token, {
+                id: signInData.user.id,
+                email: cleanEmail,
+                full_name: fullName.trim(),
+                phone: phone?.trim() || '',
+              });
+              setLoading(false);
+              return {
+                success: true,
+                message: 'Account registered & signed in! Welcome to Form & Fit.',
+              };
+            }
+          }
+
+          if (apiJson.user) {
+            const profile: UserProfile = {
+              id: apiJson.user.id,
+              email: apiJson.user.email || cleanEmail,
+              full_name: apiJson.user.full_name || fullName.trim(),
+              phone: apiJson.user.phone || phone?.trim() || '',
+              role: (apiJson.user.role as UserRole) || 'customer',
+              created_at: apiJson.user.created_at || new Date().toISOString(),
+            };
+            setUser(profile);
+            localStorage.setItem('form_fit_user_session', JSON.stringify(profile));
+            setLoading(false);
+            return {
+              success: true,
+              message: 'Account registered successfully! Welcome to Form & Fit.',
+            };
+          }
+        }
+      } catch {
+        // Fall through to direct Supabase client sign-up if `/api/auth` is unreachable
+      }
+
       if (isSupabaseConfigured()) {
         const { data, error } = await supabase.auth.signUp({
-          email,
+          email: cleanEmail,
           password,
           options: {
             data: {
-              full_name: fullName,
-              phone: phone || '',
+              full_name: fullName.trim(),
+              phone: phone?.trim() || '',
             },
           },
         });
@@ -125,14 +245,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (data.user) {
           const profile: UserProfile = {
             id: data.user.id,
-            email: email,
-            full_name: fullName,
-            phone: phone || '',
+            email: cleanEmail,
+            full_name: fullName.trim(),
+            phone: phone?.trim() || '',
             role: 'customer',
             created_at: new Date().toISOString(),
           };
-
-          // Upsert profile into public.profiles table
           await supabase.from('profiles').upsert(profile);
           setUser(profile);
           localStorage.setItem('form_fit_user_session', JSON.stringify(profile));
@@ -140,21 +258,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         setLoading(false);
         return { success: true, message: 'Account registered successfully! Welcome to Form & Fit.' };
-      } else {
-        // Direct local registration
-        const localProfile: UserProfile = {
-          id: `usr_${Math.random().toString(36).substring(2, 9)}`,
-          email,
-          full_name: fullName,
-          phone: phone || '',
-          role: 'customer',
-          created_at: new Date().toISOString(),
-        };
-        setUser(localProfile);
-        localStorage.setItem('form_fit_user_session', JSON.stringify(localProfile));
-        setLoading(false);
-        return { success: true, message: 'Account registered successfully!' };
       }
+
+      const localProfile: UserProfile = {
+        id: `usr_${Math.random().toString(36).substring(2, 9)}`,
+        email: cleanEmail,
+        full_name: fullName.trim(),
+        phone: phone?.trim() || '',
+        role: 'customer',
+        created_at: new Date().toISOString(),
+      };
+      setUser(localProfile);
+      localStorage.setItem('form_fit_user_session', JSON.stringify(localProfile));
+      setLoading(false);
+      return { success: true, message: 'Account registered successfully!' };
     } catch (err: any) {
       setLoading(false);
       return { success: false, message: err?.message || 'Registration failed' };
@@ -163,23 +280,32 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const signInWithPassword = async (email: string, password: string) => {
     setLoading(true);
+    const cleanEmail = email.trim().toLowerCase();
     try {
       if (isSupabaseConfigured()) {
-        const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email: cleanEmail,
+          password,
+        });
         if (error) {
           setLoading(false);
           return { success: false, message: error.message };
         }
-        if (data.user) {
-          await fetchUserProfile(data.user.id, data.user.email || email);
+        if (data.user && data.session?.access_token) {
+          await syncServerProfile(data.session.access_token, {
+            id: data.user.id,
+            email: data.user.email || cleanEmail,
+            full_name: data.user.user_metadata?.full_name,
+            phone: data.user.user_metadata?.phone,
+          });
         }
         setLoading(false);
         return { success: true };
       } else {
         const localProfile: UserProfile = {
           id: `usr_${Math.random().toString(36).substring(2, 9)}`,
-          email,
-          full_name: email.split('@')[0].toUpperCase(),
+          email: cleanEmail,
+          full_name: cleanEmail.split('@')[0].toUpperCase(),
           role: 'customer',
           created_at: new Date().toISOString(),
         };
@@ -196,19 +322,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const login = async (email: string, requestedRole: UserRole = 'customer') => {
     setLoading(true);
+    const cleanEmail = email.trim().toLowerCase();
     try {
       if (isSupabaseConfigured()) {
-        const { error } = await supabase.auth.signInWithOtp({ email });
+        const { error } = await supabase.auth.signInWithOtp({ email: cleanEmail });
+        setLoading(false);
         if (error) {
-          setLoading(false);
           return { success: false, message: error.message };
         }
         return { success: true, message: 'Magic login link sent to your email.' };
       } else {
         const simulatedProfile: UserProfile = {
           id: `usr_${Math.random().toString(36).substring(2, 9)}`,
-          email: email,
-          full_name: email.split('@')[0].toUpperCase(),
+          email: cleanEmail,
+          full_name: cleanEmail.split('@')[0].toUpperCase(),
           role: requestedRole,
           created_at: new Date().toISOString(),
         };
@@ -223,16 +350,65 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const authenticateOwner = async (email: string, passcode: string): Promise<{ success: boolean; message?: string }> => {
+  const authenticateOwner = async (
+    email: string,
+    passcode: string
+  ): Promise<{ success: boolean; message?: string }> => {
     setLoading(true);
     const cleanEmail = email.trim().toLowerCase();
     const cleanPasscode = passcode.trim();
 
-    const isMasterCredential =
-      (cleanEmail === 'admin@formandfit.in' || cleanEmail === 'owner@formandfit.in') &&
-      cleanPasscode === 'FormFit2026!Admin';
+    // 1. Validate against server `/api/auth` (`ADMIN_PASSCODE` + Supabase Auth & `profiles` sync)
+    try {
+      const apiRes = await fetch('/api/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'owner-login',
+          email: cleanEmail,
+          passcode: cleanPasscode,
+        }),
+      });
 
-    // Always attempt Supabase Auth sign-in when configured so browser obtains a real Supabase JWT for RLS
+      const apiJson = await apiRes.json().catch(() => null);
+      if (apiRes.ok && apiJson?.authorized) {
+        setAdminSessionCredentials(cleanEmail, cleanPasscode);
+
+        let supabaseUserId = apiJson.user?.id || 'owner_primary_account';
+        if (isSupabaseConfigured()) {
+          const { data: signInData } = await supabase.auth.signInWithPassword({
+            email: cleanEmail,
+            password: cleanPasscode,
+          });
+          if (signInData?.user?.id) {
+            supabaseUserId = signInData.user.id;
+          }
+        }
+
+        const verifiedOwner: UserProfile = {
+          id: supabaseUserId,
+          email: cleanEmail,
+          full_name: apiJson.user?.full_name || 'Store Owner Admin',
+          role: (apiJson.role === 'admin' ? 'admin' : 'owner') as UserRole,
+          created_at: new Date().toISOString(),
+        };
+
+        setUser(verifiedOwner);
+        localStorage.setItem('form_fit_user_session', JSON.stringify(verifiedOwner));
+        localStorage.setItem('form_fit_owner_mode', 'true');
+        setLoading(false);
+        return { success: true };
+      }
+
+      if (apiRes.status === 401 && apiJson?.error) {
+        setLoading(false);
+        return { success: false, message: apiJson.error };
+      }
+    } catch {
+      // Fall back to direct Supabase check below if `/api/auth` is unreachable
+    }
+
+    // 2. Direct Supabase fallback
     if (isSupabaseConfigured()) {
       try {
         const { data, error } = await supabase.auth.signInWithPassword({
@@ -247,11 +423,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             .eq('id', data.user.id)
             .maybeSingle();
 
+          const isMasterEmail =
+            cleanEmail === 'admin@formandfit.in' || cleanEmail === 'owner@formandfit.in';
           const isApprovedRole =
-            isMasterCredential ||
+            isMasterEmail ||
             (profileData && (profileData.role === 'owner' || profileData.role === 'admin'));
 
           if (isApprovedRole) {
+            setAdminSessionCredentials(cleanEmail, cleanPasscode);
             const verifiedOwner: UserProfile = {
               id: data.user.id,
               email: profileData?.email || data.user.email || cleanEmail,
@@ -259,34 +438,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               role: (profileData?.role === 'admin' ? 'admin' : 'owner') as UserRole,
               created_at: profileData?.created_at || new Date().toISOString(),
             };
-            if (isMasterCredential) {
-              setAdminSessionCredentials(cleanEmail, cleanPasscode);
-            }
             setUser(verifiedOwner);
             localStorage.setItem('form_fit_user_session', JSON.stringify(verifiedOwner));
             localStorage.setItem('form_fit_owner_mode', 'true');
             setLoading(false);
             return { success: true };
-          }
-        } else if (isMasterCredential) {
-          // Provision master owner account in Supabase Auth if not registered yet
-          const { data: signUpData } = await supabase.auth.signUp({
-            email: cleanEmail,
-            password: cleanPasscode,
-            options: {
-              data: { full_name: 'Store Owner Admin', role: 'owner' },
-            },
-          });
-          if (signUpData?.session && signUpData?.user) {
-            await supabase
-              .from('profiles')
-              .upsert({
-                id: signUpData.user.id,
-                email: cleanEmail,
-                full_name: 'Store Owner Admin',
-                role: 'owner',
-              })
-              .then(() => {});
           }
         }
       } catch (err) {
@@ -294,26 +450,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     }
 
-    if (isMasterCredential) {
-      setAdminSessionCredentials(cleanEmail, cleanPasscode);
-      const ownerProfile: UserProfile = {
-        id: 'owner_primary_account',
-        email: cleanEmail,
-        full_name: 'Store Owner Admin',
-        role: 'owner',
-        created_at: new Date().toISOString(),
-      };
-      setUser(ownerProfile);
-      localStorage.setItem('form_fit_user_session', JSON.stringify(ownerProfile));
-      localStorage.setItem('form_fit_owner_mode', 'true');
-      setLoading(false);
-      return { success: true };
-    }
-
     setLoading(false);
     return {
       success: false,
-      message: 'Access Denied: Invalid Admin Credentials. Only approved store administrators may log in.',
+      message:
+        'Access Denied: Invalid Admin Credentials. Only approved store administrators may log in.',
     };
   };
 
@@ -346,6 +487,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const updated = { ...user, ...data };
     setUser(updated);
     localStorage.setItem('form_fit_user_session', JSON.stringify(updated));
+
+    try {
+      const headers = await getCustomerAuthHeaders();
+      if (headers.Authorization) {
+        await fetch('/api/auth', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            action: 'sync-profile',
+            full_name: updated.full_name,
+            phone: updated.phone,
+          }),
+        });
+        return;
+      }
+    } catch {
+      // fall through
+    }
 
     if (isSupabaseConfigured()) {
       await supabase.from('profiles').update(data).eq('id', user.id);

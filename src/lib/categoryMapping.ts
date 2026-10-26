@@ -328,6 +328,21 @@ export function isProductWomensFootwearItem(
   );
 }
 
+export const BUILTIN_COLLECTION_CARD_SLUGS = new Set([
+  'mens-fashion',
+  'womens-fashion',
+  'unisex',
+  'footwear',
+  'mens-footwear',
+  'womens-footwear',
+  'accessories',
+  'tshirts-tops',
+  'hoodies-sweatshirts',
+  'custom-apparel',
+]);
+
+export const CANONICAL_DEFAULT_SLUGS = new Set(CANONICAL_CATEGORIES.map((c) => c.slug));
+
 /**
  * Matches a product against a category query parameter (`cat-4`, `cat-9`, `cat-9-men`, UUID, or slug).
  */
@@ -365,16 +380,47 @@ export function matchesProductCategoryFilter(
     return true;
   }
 
-  // Also check if selectedCategoryParam is a parent category of the product's subcategory
+  // Ensure Men's Fashion / Women's Fashion / Unisex category links also include garments tagged with that Gender Collection
+  if (filterKey === 'mens-fashion') {
+    return (
+      product.gender_collection === 'Men' &&
+      !isProductFootwearItem(product, categories) &&
+      !isAccessoriesCategoryKey(product.category_id, categories, product.category)
+    );
+  }
+  if (filterKey === 'womens-fashion') {
+    return (
+      (product.gender_collection === 'Women' || productKey === 'dresses-coords') &&
+      !isProductFootwearItem(product, categories) &&
+      !isAccessoriesCategoryKey(product.category_id, categories, product.category)
+    );
+  }
+  if (filterKey === 'unisex') {
+    return (
+      product.gender_collection === 'Unisex' &&
+      !isProductFootwearItem(product, categories) &&
+      !isAccessoriesCategoryKey(product.category_id, categories, product.category)
+    );
+  }
+
+  // Check if selectedCategoryParam is a parent category of the product's subcategory (including custom collections)
   const productCat =
     product.category ||
     categories.find((c) => c.id === product.category_id || c.slug === product.category_id);
   if (productCat?.parent_id) {
     const parentKey = getCategoryCanonicalKey(productCat.parent_id, categories);
-    if (parentKey && parentKey === filterKey) return true;
+    if (
+      (parentKey && parentKey === filterKey) ||
+      productCat.parent_id === selectedCategoryParam
+    ) {
+      return true;
+    }
   }
 
-  return product.category_id === selectedCategoryParam;
+  return (
+    product.category_id === selectedCategoryParam ||
+    product.category?.slug?.toLowerCase() === selectedCategoryParam.toLowerCase()
+  );
 }
 
 /**

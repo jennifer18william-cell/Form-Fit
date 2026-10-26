@@ -42,9 +42,19 @@ export const Shop: React.FC = () => {
   const selectedGender = searchParams.get('gender') || '';
   const searchQuery = searchParams.get('search') || '';
   const [selectedSize, setSelectedSize] = useState<string>('');
-  const [priceMax, setPriceMax] = useState<number>(15000);
+  const [customPriceMax, setCustomPriceMax] = useState<number | null>(null);
   const [sortBy, setSortBy] = useState<string>('newest');
   const [isMobileFilterOpen, setIsMobileFilterOpen] = useState<boolean>(false);
+
+  const sliderMax = useMemo(() => {
+    const highest = products.reduce(
+      (max, p) => Math.max(max, Number(p.sale_price || p.regular_price || 0)),
+      0
+    );
+    return Math.max(25000, Math.ceil(highest / 1000) * 1000);
+  }, [products]);
+
+  const priceMax = customPriceMax !== null ? customPriceMax : sliderMax;
 
   const selectedCategoryKey = getCategoryCanonicalKey(selectedCategory, categories);
   const selectedCategoryObj =
@@ -171,7 +181,18 @@ export const Shop: React.FC = () => {
           p.gender_collection !== selectedGender &&
           p.gender_collection !== 'Unisex'
         ) {
-          return false;
+          const prodCatKey = getCategoryCanonicalKey(p.category_id, categories, p.category);
+          const matchesMenCat =
+            selectedGender === 'Men' &&
+            (prodCatKey === 'mens-fashion' || prodCatKey === 'mens-footwear');
+          const matchesWomenCat =
+            selectedGender === 'Women' &&
+            (prodCatKey === 'womens-fashion' ||
+              prodCatKey === 'womens-footwear' ||
+              prodCatKey === 'dresses-coords');
+          if (!matchesMenCat && !matchesWomenCat) {
+            return false;
+          }
         }
       }
 
@@ -229,7 +250,7 @@ export const Shop: React.FC = () => {
   const clearAllFilters = () => {
     setSearchParams({});
     setSelectedSize('');
-    setPriceMax(15000);
+    setCustomPriceMax(null);
     setSortBy('newest');
   };
 
@@ -247,7 +268,7 @@ export const Shop: React.FC = () => {
         <h3 className="font-space font-semibold text-xs uppercase tracking-wider flex items-center gap-2 text-[#18181B]">
           <Filter size={14} className="text-[#4D7C0F]" /> Filter Catalog
         </h3>
-        {(selectedCategory || selectedGender || selectedSize || searchQuery || priceMax < 15000) && (
+        {(selectedCategory || selectedGender || selectedSize || searchQuery || customPriceMax !== null) && (
           <button
             onClick={clearAllFilters}
             className="text-xs font-medium text-red-600 hover:underline cursor-pointer"
@@ -382,16 +403,18 @@ export const Shop: React.FC = () => {
         <div className="flex justify-between items-center text-xs font-space font-semibold text-[#18181B]">
           <span>Max Price</span>
           <span className="text-[#3F6212] font-mono tabular-nums font-bold">
-            ₹{priceMax.toLocaleString('en-IN')}
+            {customPriceMax === null
+              ? `Any (Up to ₹${sliderMax.toLocaleString('en-IN')})`
+              : `₹${priceMax.toLocaleString('en-IN')}`}
           </span>
         </div>
         <input
           type="range"
           min="499"
-          max="15000"
+          max={sliderMax}
           step="500"
           value={priceMax}
-          onChange={(e) => setPriceMax(Number(e.target.value))}
+          onChange={(e) => setCustomPriceMax(Number(e.target.value))}
           className="w-full accent-[#65A30D] cursor-pointer"
         />
       </div>

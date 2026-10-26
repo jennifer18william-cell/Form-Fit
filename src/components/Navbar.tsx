@@ -4,6 +4,10 @@ import { useStore } from '../context/StoreContext';
 import { useAuth } from '../context/AuthContext';
 import { CartDrawer } from './CartDrawer';
 import {
+  CANONICAL_DEFAULT_SLUGS,
+  getCategoryCanonicalKey,
+} from '../lib/categoryMapping';
+import {
   ShoppingBag,
   Heart,
   User,
@@ -27,6 +31,7 @@ export const Navbar: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [isFootwearMenuOpen, setIsFootwearMenuOpen] = useState(false);
+  const [isCollectionsMenuOpen, setIsCollectionsMenuOpen] = useState(false);
 
   const navigate = useNavigate();
   const location = useLocation();
@@ -48,38 +53,64 @@ export const Navbar: React.FC = () => {
   const isAccessoriesActive =
     location.search.includes('category=cat-10') || location.search.includes('gender=Accessories');
 
+  const customOwnerCollections = categories.filter(
+    (c) =>
+      !c.parent_id &&
+      !CANONICAL_DEFAULT_SLUGS.has(getCategoryCanonicalKey(c.id, categories, c))
+  );
+
+  const mobileCategoryLinks = categories.filter((c) => {
+    if (c.parent_id) return false;
+    const key = getCategoryCanonicalKey(c.id, categories, c);
+    return !['mens-fashion', 'womens-fashion', 'unisex', 'footwear', 'accessories'].includes(key);
+  });
+
+  const hasCustomAnnouncement =
+    Boolean(storeSettings.announcement_text?.trim()) &&
+    storeSettings.announcement_text?.trim() !==
+      'Free Shipping on All Orders Over ₹1,999 across India | Use Code: FORM10 for 10% Off';
+
   return (
     <header className="sticky top-0 z-40 bg-[#FCF9F5]/95 backdrop-blur-md border-b border-[#E6E0D6]">
       {/* Top Announcement Bar */}
       {storeSettings.announcement_enabled && (
         <div className="bg-[#111111] text-white py-2 px-4 text-[10px] sm:text-[11px] font-space font-bold uppercase tracking-wider">
           <div className="max-w-[1440px] mx-auto flex items-center justify-center">
-            <div className="hidden xl:flex items-center justify-center gap-5 whitespace-nowrap">
-              <span className="inline-flex items-center gap-1.5">
-                <Truck size={13} className="text-white/85 shrink-0" />
-                <span>
-                  ORDERS OVER ₹1,999 ACROSS INDIA | USE CODE:{' '}
-                  <span className="text-[#B8F130]">FORM10</span> FOR 10% OFF
-                </span>
-              </span>
-              <span className="text-[#B8F130]" aria-hidden="true">|</span>
-              <span className="inline-flex items-center gap-1.5">
-                <Truck size={13} className="text-white/85 shrink-0" />
-                <span>FREE EXPRESS COURIER SHIPPING OVER ₹1,999</span>
-              </span>
-              <span className="text-[#B8F130]" aria-hidden="true">|</span>
-              <span className="text-[#B8F130]">240 GSM HEAVYWEIGHT COMBED COTTON DROP</span>
-              <span className="text-[#B8F130]" aria-hidden="true">|</span>
-              <span>INTERACTIVE 2D CUSTOM STUDIO LIVE</span>
-            </div>
+            {hasCustomAnnouncement ? (
+              <div className="flex items-center justify-center gap-2 truncate text-center">
+                <Truck size={13} className="text-[#B8F130] shrink-0" />
+                <span className="truncate">{storeSettings.announcement_text}</span>
+              </div>
+            ) : (
+              <>
+                <div className="hidden xl:flex items-center justify-center gap-5 whitespace-nowrap">
+                  <span className="inline-flex items-center gap-1.5">
+                    <Truck size={13} className="text-white/85 shrink-0" />
+                    <span>
+                      ORDERS OVER ₹1,999 ACROSS INDIA | USE CODE:{' '}
+                      <span className="text-[#B8F130]">FORM10</span> FOR 10% OFF
+                    </span>
+                  </span>
+                  <span className="text-[#B8F130]" aria-hidden="true">|</span>
+                  <span className="inline-flex items-center gap-1.5">
+                    <Truck size={13} className="text-white/85 shrink-0" />
+                    <span>FREE EXPRESS COURIER SHIPPING OVER ₹1,999</span>
+                  </span>
+                  <span className="text-[#B8F130]" aria-hidden="true">|</span>
+                  <span className="text-[#B8F130]">240 GSM HEAVYWEIGHT COMBED COTTON DROP</span>
+                  <span className="text-[#B8F130]" aria-hidden="true">|</span>
+                  <span>INTERACTIVE 2D CUSTOM STUDIO LIVE</span>
+                </div>
 
-            <div className="xl:hidden flex items-center justify-center gap-2 truncate text-center">
-              <Truck size={13} className="text-[#B8F130] shrink-0" />
-              <span className="truncate">
-                {storeSettings.announcement_text ||
-                  'ORDERS OVER ₹1,999 ACROSS INDIA | USE CODE: FORM10 FOR 10% OFF'}
-              </span>
-            </div>
+                <div className="xl:hidden flex items-center justify-center gap-2 truncate text-center">
+                  <Truck size={13} className="text-[#B8F130] shrink-0" />
+                  <span className="truncate">
+                    {storeSettings.announcement_text ||
+                      'ORDERS OVER ₹1,999 ACROSS INDIA | USE CODE: FORM10 FOR 10% OFF'}
+                  </span>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
@@ -237,6 +268,49 @@ export const Navbar: React.FC = () => {
             >
               ACCESSORIES
             </Link>
+
+            {customOwnerCollections.length > 0 && (
+              <div
+                className="relative"
+                onMouseEnter={() => setIsCollectionsMenuOpen(true)}
+                onMouseLeave={() => setIsCollectionsMenuOpen(false)}
+              >
+                <button
+                  type="button"
+                  onClick={() => setIsCollectionsMenuOpen(!isCollectionsMenuOpen)}
+                  className="hover:text-[#65A30D] transition-colors whitespace-nowrap shrink-0 py-1 border-b-2 border-transparent inline-flex items-center gap-1 uppercase cursor-pointer"
+                >
+                  <span>COLLECTIONS</span>
+                  <ChevronDown
+                    size={13}
+                    className={`transition-transform duration-150 ${
+                      isCollectionsMenuOpen ? 'rotate-180 text-[#65A30D]' : ''
+                    }`}
+                  />
+                </button>
+
+                {isCollectionsMenuOpen && (
+                  <div className="absolute left-0 top-full pt-2 w-56 z-50">
+                    <div className="bg-white border border-[#E5E4DF] rounded-lg shadow-lg py-2 text-xs font-sans normal-case tracking-normal text-[#18181B]">
+                      <div className="px-3.5 py-1.5 text-[10px] font-space font-bold uppercase tracking-wider text-[#65A30D] border-b border-[#F3F2EE]">
+                        Featured Collections
+                      </div>
+                      {customOwnerCollections.map((col) => (
+                        <Link
+                          key={col.id}
+                          to={`/shop?category=${encodeURIComponent(col.id)}`}
+                          onClick={() => setIsCollectionsMenuOpen(false)}
+                          className="flex items-center justify-between px-3.5 py-2.5 hover:bg-[#F4FBE1] font-medium text-[#18181B] transition-colors"
+                        >
+                          <span className="truncate">{col.name}</span>
+                          <ChevronRight size={13} className="text-[#94A3B8] shrink-0" />
+                        </Link>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
             <Link
               to="/custom-studio"
@@ -484,13 +558,13 @@ export const Navbar: React.FC = () => {
           </Link>
 
           <div className="pt-2 text-[10px] text-[#71717A] font-sans font-semibold normal-case tracking-normal">
-            More Categories
+            Collections &amp; Categories
           </div>
           <div className="grid grid-cols-2 gap-2 text-[11px] font-sans font-medium normal-case tracking-normal">
-            {categories.slice(3, 9).map((cat) => (
+            {mobileCategoryLinks.map((cat) => (
               <Link
                 key={cat.id}
-                to={`/shop?category=${cat.id}`}
+                to={`/shop?category=${encodeURIComponent(cat.id)}`}
                 onClick={() => setIsMobileMenuOpen(false)}
                 className="py-2 px-3 bg-[#FAF9F6] border border-[#E5E4DF] text-[#18181B] hover:border-[#9ED912] transition-colors rounded-md truncate"
               >

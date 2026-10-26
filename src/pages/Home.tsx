@@ -5,6 +5,13 @@ import { ProductCard } from '../components/ProductCard';
 import { EmptyCatalogState } from '../components/EmptyCatalogState';
 import { fetchFashionImages } from '../services/fashionImageService';
 import {
+  BUILTIN_COLLECTION_CARD_SLUGS,
+  CANONICAL_DEFAULT_SLUGS,
+  getCategoryCanonicalKey,
+  matchesProductCategoryFilter,
+} from '../lib/categoryMapping';
+import { getFashionFallbackImage } from '../lib/imageOptimization';
+import {
   ArrowRight,
   Zap,
   Shirt,
@@ -21,7 +28,7 @@ import accessoriesStudioImg from '../assets/images/accessories_leather_goods_stu
 const EDITORIAL_HERO_ASSET = '/assets/aistudio/Form___Fit__Editorial_Essentials_b0cfeab9.png';
 
 export const Home: React.FC = () => {
-  const { products, storeSettings, loading, catalogError, refreshCatalog } = useStore();
+  const { products, categories, storeSettings, loading, catalogError, refreshCatalog } = useStore();
   const [categoryPhotos, setCategoryPhotos] = useState<Record<string, string>>({});
 
   useEffect(() => {
@@ -56,7 +63,29 @@ export const Home: React.FC = () => {
     .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
   const newArrivals = publishedProducts.slice(0, 8);
 
-  const categoryCards = [
+  const footwearParent = categories.find(
+    (c) => getCategoryCanonicalKey(c.id, categories, c) === 'footwear'
+  );
+  const extraFootwearSubs = footwearParent
+    ? categories.filter(
+        (sub) =>
+          sub.parent_id === footwearParent.id &&
+          !['mens-footwear', 'womens-footwear'].includes(
+            getCategoryCanonicalKey(sub.id, categories, sub)
+          )
+      )
+    : [];
+
+  const baseCategoryCards: Array<{
+    id: string;
+    title: string;
+    desc: string;
+    link: string;
+    imageKey: string;
+    localImg?: string;
+    fallbackImg: string;
+    subLinks?: Array<{ label: string; to: string }>;
+  }> = [
     {
       id: 'mens',
       title: "Men's Fashion",
@@ -92,6 +121,10 @@ export const Home: React.FC = () => {
       subLinks: [
         { label: "Men's Footwear", to: '/shop?category=cat-9-men' },
         { label: "Women's Footwear", to: '/shop?category=cat-9-women' },
+        ...extraFootwearSubs.map((sub) => ({
+          label: sub.name,
+          to: `/shop?category=${encodeURIComponent(sub.id)}`,
+        })),
       ],
     },
     {
@@ -128,6 +161,45 @@ export const Home: React.FC = () => {
       fallbackImg: 'https://images.pexels.com/photos/2294342/pexels-photo-2294342.jpeg?auto=compress&cs=tinysrgb&w=800',
     },
   ];
+
+  // Dynamically surface any custom Collections created by the Owner (plus secondary categories with live products)
+  const dynamicOwnerCollectionCards = categories
+    .filter((cat) => {
+      if (cat.parent_id) return false;
+      const key = getCategoryCanonicalKey(cat.id, categories, cat);
+      if (BUILTIN_COLLECTION_CARD_SLUGS.has(key)) return false;
+      const isCustomOwnerCollection = !CANONICAL_DEFAULT_SLUGS.has(key);
+      if (isCustomOwnerCollection) return true;
+      return publishedProducts.some((p) => matchesProductCategoryFilter(p, cat.id, categories));
+    })
+    .map((cat) => {
+      const matchingProd = publishedProducts.find((p) =>
+        matchesProductCategoryFilter(p, cat.id, categories)
+      );
+      const firstProdImg =
+        matchingProd?.images?.find((i) => i.is_main)?.url || matchingProd?.images?.[0]?.url;
+      const fallback = getFashionFallbackImage(cat.name, cat.name);
+      const childCats = categories.filter((sub) => sub.parent_id === cat.id);
+
+      return {
+        id: cat.id,
+        title: cat.name,
+        desc: cat.description || `Explore our curated ${cat.name} collection.`,
+        link: `/shop?category=${encodeURIComponent(cat.id)}`,
+        imageKey: cat.slug,
+        localImg: cat.image_url || firstProdImg || undefined,
+        fallbackImg: fallback,
+        subLinks:
+          childCats.length > 0
+            ? childCats.map((sub) => ({
+                label: sub.name,
+                to: `/shop?category=${encodeURIComponent(sub.id)}`,
+              }))
+            : undefined,
+      };
+    });
+
+  const categoryCards = [...baseCategoryCards, ...dynamicOwnerCollectionCards];
 
   const hasCustomHeadline =
     Boolean(storeSettings.hero_headline) &&

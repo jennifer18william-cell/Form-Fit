@@ -23,7 +23,15 @@ import {
   DEFAULT_COUPONS,
   INITIAL_PRODUCTS,
 } from '../data/initialData';
-import { supabase, isSupabaseConfigured, getAdminRequestHeaders } from '../lib/supabase';
+import {
+  supabase,
+  isSupabaseConfigured,
+  getAdminRequestHeaders,
+  getCustomerAuthHeaders,
+  subscribeToRealtimeSync,
+  broadcastRealtimeSync,
+  RealtimeTopic,
+} from '../lib/supabase';
 import {
   generateUUID,
   getFashionFallbackImage,
@@ -107,6 +115,7 @@ interface StoreContextType {
   orders: Order[];
   coupons: Coupon[];
   reviews: Review[];
+  addresses: ShippingAddress[];
   storeSettings: StoreSettings;
   contactMessages: ContactMessage[];
   inventoryLogs: InventoryLog[];
@@ -123,7 +132,7 @@ interface StoreContextType {
   toggleProductStatus: (id: string) => Promise<void>;
 
   // Category operations
-  saveCategory: (categoryData: Partial<Category>) => Promise<void>;
+  saveCategory: (categoryData: Partial<Category>) => Promise<Category>;
   deleteCategory: (id: string) => Promise<void>;
 
   // Inventory operations
@@ -143,12 +152,14 @@ interface StoreContextType {
   // Coupon operations
   applyCoupon: (code: string) => { success: boolean; message: string };
   removeCoupon: () => void;
+  saveCoupon: (couponData: Partial<Coupon>) => Promise<Coupon>;
+  deleteCoupon: (id: string) => Promise<void>;
 
   // Wishlist operations
   toggleWishlist: (product: Product) => void;
   isInWishlist: (productId: string) => boolean;
 
-  // Order operations
+  // Order & Address operations
   createOrder: (orderData: {
     customerEmail: string;
     customerPhone: string;
@@ -158,6 +169,7 @@ interface StoreContextType {
   }) => Promise<{ success: boolean; orderId?: string; orderNumber?: string; message?: string }>;
   updateOrderStatus: (orderId: string, status: OrderStatus, trackingNumber?: string) => Promise<void>;
   updatePaymentStatus: (orderId: string, paymentStatus: PaymentStatus) => Promise<void>;
+  saveAddress: (address: ShippingAddress) => Promise<void>;
 
   // Review & Settings
   addReview: (productId: string, rating: number, comment: string, reviewerName: string) => Promise<void>;
@@ -257,7 +269,7 @@ function normalizeClientProduct(
 }
 
 export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { isAdmin } = useAuth();
+  const { user, isAdmin } = useAuth();
 
   // Never initialize public storefront from stale browser localStorage; always load authoritative shared DB state
   const [products, setProducts] = useState<Product[]>(INITIAL_PRODUCTS);
@@ -265,6 +277,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [loading, setLoading] = useState<boolean>(true);
   const [catalogError, setCatalogError] = useState<string | null>(null);
   const autoSyncAttemptedRef = useRef<boolean>(false);
+  const realtimeTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   const [categories, setCategories] = useState<Category[]>(() => {
     const saved = localStorage.getItem('form_fit_categories');
@@ -325,37 +338,82 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const [wishlist, setWishlist] = useState<WishlistItem[]>(() => {
     const saved = localStorage.getItem('form_fit_wishlist');
-    return saved ? JSON.parse(saved) : [];
+    if (!saved) return [];
+    try {
+      return JSON.parse(saved);
+    } catch {
+      return [];
+    }
   });
 
   const [orders, setOrders] = useState<Order[]>(() => {
     const saved = localStorage.getItem('form_fit_orders');
-    return saved ? JSON.parse(saved) : [];
+    if (!saved) return [];
+    try {
+      return JSON.parse(saved);
+    } catch {
+      return [];
+    }
   });
 
-  const [coupons] = useState<Coupon[]>(() => {
+  const [coupons, setCoupons] = useState<Coupon[]>(() => {
     const saved = localStorage.getItem('form_fit_coupons');
-    return saved ? JSON.parse(saved) : DEFAULT_COUPONS;
+    if (!saved) return DEFAULT_COUPONS;
+    try {
+      return JSON.parse(saved);
+    } catch {
+      return DEFAULT_COUPONS;
+    }
   });
 
   const [reviews, setReviews] = useState<Review[]>(() => {
     const saved = localStorage.getItem('form_fit_reviews');
-    return saved ? JSON.parse(saved) : [];
+    if (!saved) return [];
+    try {
+      return JSON.parse(saved);
+    } catch {
+      return [];
+    }
+  });
+
+  const [addresses, setAddresses] = useState<ShippingAddress[]>(() => {
+    const saved = localStorage.getItem('form_fit_addresses');
+    if (!saved) return [];
+    try {
+      return JSON.parse(saved);
+    } catch {
+      return [];
+    }
   });
 
   const [storeSettings, setStoreSettings] = useState<StoreSettings>(() => {
     const saved = localStorage.getItem('form_fit_store_settings');
-    return saved ? JSON.parse(saved) : DEFAULT_STORE_SETTINGS;
+    if (!saved) return DEFAULT_STORE_SETTINGS;
+    try {
+      return { ...DEFAULT_STORE_SETTINGS, ...JSON.parse(saved) };
+    } catch {
+      return DEFAULT_STORE_SETTINGS;
+    }
   });
 
   const [contactMessages, setContactMessages] = useState<ContactMessage[]>(() => {
     const saved = localStorage.getItem('form_fit_contact_messages');
-    return saved ? JSON.parse(saved) : [];
+    if (!saved) return [];
+    try {
+      return JSON.parse(saved);
+    } catch {
+      return [];
+    }
   });
 
   const [inventoryLogs, setInventoryLogs] = useState<InventoryLog[]>(() => {
     const saved = localStorage.getItem('form_fit_inventory_logs');
-    return saved ? JSON.parse(saved) : [];
+    if (!saved) return [];
+    try {
+      return JSON.parse(saved);
+    } catch {
+      return [];
+    }
   });
 
   const [appliedCoupon, setAppliedCoupon] = useState<Coupon | null>(null);
@@ -377,12 +435,67 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   }, [orders]);
 
   useEffect(() => {
+    safeStorageSet('form_fit_coupons', coupons);
+  }, [coupons]);
+
+  useEffect(() => {
+    safeStorageSet('form_fit_addresses', addresses);
+  }, [addresses]);
+
+  useEffect(() => {
     safeStorageSet('form_fit_store_settings', storeSettings);
   }, [storeSettings]);
 
   useEffect(() => {
     safeStorageSet('form_fit_inventory_logs', inventoryLogs);
   }, [inventoryLogs]);
+
+  // Fetch Store Settings, Promo Coupons, and Reviews from Shared Database
+  const fetchStoreBootstrap = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/store?resource=bootstrap&t=${Date.now()}`, {
+        cache: 'no-store',
+      });
+      if (res.ok) {
+        const json = await res.json();
+        if (json?.success) {
+          if (json.storeSettings) {
+            setStoreSettings((prev) => ({ ...prev, ...json.storeSettings }));
+          }
+          if (Array.isArray(json.coupons) && json.coupons.length > 0) {
+            setCoupons(json.coupons);
+          }
+          if (Array.isArray(json.reviews)) {
+            setReviews(json.reviews);
+          }
+          return;
+        }
+      }
+    } catch {
+      // fall through to direct Supabase read
+    }
+
+    if (isSupabaseConfigured()) {
+      try {
+        const [settingsRes, couponsRes, reviewsRes] = await Promise.all([
+          supabase.from('store_settings').select('value').eq('key', 'general').maybeSingle(),
+          supabase.from('coupons').select('*').order('created_at', { ascending: false }),
+          supabase.from('reviews').select('*').order('created_at', { ascending: false }).limit(100),
+        ]);
+        if (settingsRes.data?.value && typeof settingsRes.data.value === 'object') {
+          setStoreSettings((prev) => ({ ...prev, ...(settingsRes.data!.value as Partial<StoreSettings>) }));
+        }
+        if (couponsRes.data && couponsRes.data.length > 0) {
+          setCoupons(couponsRes.data as Coupon[]);
+        }
+        if (reviewsRes.data) {
+          setReviews(reviewsRes.data as Review[]);
+        }
+      } catch (err) {
+        console.warn('Store bootstrap fetch notice:', err);
+      }
+    }
+  }, []);
 
   // Fetch Categories from Shared Database / API
   const fetchCategories = useCallback(async (): Promise<Category[]> => {
@@ -468,7 +581,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       // Fall back to direct Supabase SDK query below if configured
     }
 
-    // 2. Direct Supabase query fallback (e.g. if client env is configured directly)
+    // 2. Direct Supabase query fallback
     if (!fetchedFromSharedDb && isSupabaseConfigured()) {
       try {
         const { data: sessionData } = await supabase.auth.getSession();
@@ -508,13 +621,11 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
 
     if (fetchedFromSharedDb) {
-      // Sort newest arrivals first
       const sorted = [...dbProducts].sort(
         (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
       );
       setProducts(sorted);
 
-      // Detect any pre-existing owner products that were previously trapped in browser localStorage
       if (isAdmin) {
         const legacyLocal = readLegacyLocalProducts();
         if (legacyLocal.length > 0) {
@@ -529,7 +640,6 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           );
           setUnsyncedLocalProducts(stranded);
           if (stranded.length === 0) {
-            // Clean up legacy local cache once all products are safely in the shared database
             localStorage.removeItem('form_fit_products');
           }
         } else {
@@ -545,39 +655,133 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setLoading(false);
   }, [isAdmin, fetchCategories]);
 
+  // Fetch Orders for Admin (all orders) or Logged-In Customer (their own orders)
   const fetchOrdersFromSupabase = useCallback(async () => {
-    if (!isSupabaseConfigured() || !isAdmin) return;
+    if (!user && !isAdmin) return;
     try {
-      const { data, error } = await supabase
+      const headers = isAdmin ? await getAdminRequestHeaders() : await getCustomerAuthHeaders();
+      const apiRes = await fetch(`/api/store?resource=orders&t=${Date.now()}`, {
+        headers,
+        cache: 'no-store',
+      });
+      if (apiRes.ok) {
+        const json = await apiRes.json();
+        if (json?.success && Array.isArray(json.orders) && json.storageMode === 'supabase') {
+          setOrders(json.orders as Order[]);
+          return;
+        }
+      }
+    } catch {
+      // fall through to direct Supabase query
+    }
+
+    if (!isSupabaseConfigured()) return;
+    try {
+      let query = supabase
         .from('orders')
-        .select(`*, items:order_items(*)`)
+        .select('*, items:order_items(*)')
         .order('created_at', { ascending: false });
-      if (!error && data && data.length > 0) {
+      if (!isAdmin && user) {
+        query = query.eq('user_id', user.id);
+      }
+      const { data, error } = await query;
+      if (!error && data) {
         setOrders(data as Order[]);
       }
     } catch (err) {
       console.error('Failed to fetch orders:', err);
     }
-  }, [isAdmin]);
+  }, [isAdmin, user]);
 
-  // Initial load and re-fetch on auth role change or tab focus
+  // Fetch Saved Shipping Addresses for Logged-In Customer
+  const fetchAddressesFromSupabase = useCallback(async () => {
+    if (!user) {
+      setAddresses([]);
+      return;
+    }
+    try {
+      const headers = await getCustomerAuthHeaders();
+      if (headers.Authorization) {
+        const res = await fetch(`/api/store?resource=addresses&t=${Date.now()}`, {
+          headers,
+          cache: 'no-store',
+        });
+        if (res.ok) {
+          const json = await res.json();
+          if (json?.success && Array.isArray(json.addresses)) {
+            setAddresses(json.addresses as ShippingAddress[]);
+            return;
+          }
+        }
+      }
+    } catch {
+      // fall through
+    }
+
+    if (isSupabaseConfigured() && isValidUUID(user.id)) {
+      try {
+        const { data } = await supabase
+          .from('addresses')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false });
+        if (data) {
+          setAddresses(data as ShippingAddress[]);
+        }
+      } catch {
+        // ignore
+      }
+    }
+  }, [user]);
+
+  // Initial load, tab visibility refresh, and LIVE Real-Time WebSocket + Cross-Tab Subscription
   useEffect(() => {
     refreshCatalog();
+    fetchStoreBootstrap();
     fetchOrdersFromSupabase();
+    fetchAddressesFromSupabase();
 
     const handleVisibilityOrFocus = () => {
       if (document.visibilityState === 'visible') {
         refreshCatalog();
+        fetchStoreBootstrap();
+        fetchOrdersFromSupabase();
       }
     };
+
+    const scheduleRealtimeRefresh = (topic: RealtimeTopic) => {
+      if (realtimeTimersRef.current[topic]) {
+        clearTimeout(realtimeTimersRef.current[topic]);
+      }
+      realtimeTimersRef.current[topic] = setTimeout(() => {
+        if (topic === 'catalog' || topic === 'categories' || topic === 'all') {
+          refreshCatalog();
+        }
+        if (topic === 'settings' || topic === 'coupons' || topic === 'all') {
+          fetchStoreBootstrap();
+        }
+        if (topic === 'orders' || topic === 'all') {
+          fetchOrdersFromSupabase();
+        }
+      }, 220);
+    };
+
+    const unsubscribeRealtime = subscribeToRealtimeSync(scheduleRealtimeRefresh);
 
     window.addEventListener('focus', handleVisibilityOrFocus);
     document.addEventListener('visibilitychange', handleVisibilityOrFocus);
     return () => {
+      unsubscribeRealtime();
+      Object.values(realtimeTimersRef.current).forEach(clearTimeout);
       window.removeEventListener('focus', handleVisibilityOrFocus);
       document.removeEventListener('visibilitychange', handleVisibilityOrFocus);
     };
-  }, [refreshCatalog, fetchOrdersFromSupabase]);
+  }, [
+    refreshCatalog,
+    fetchStoreBootstrap,
+    fetchOrdersFromSupabase,
+    fetchAddressesFromSupabase,
+  ]);
 
   /**
    * Direct client-side Supabase persistence fallback when server does not hold `SUPABASE_SERVICE_ROLE_KEY`,
@@ -587,7 +791,6 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const productId = ensureValidUUID(fullProduct.id);
     const now = new Date().toISOString();
 
-    // 1. Resolve or seed UUID category in `public.categories`
     let resolvedCategoryUuid: string | null = null;
     const catSpec =
       getCanonicalCategorySpec(fullProduct.category_id) ||
@@ -648,7 +851,6 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       resolvedCategoryUuid = fullProduct.category_id;
     }
 
-    // 2. Ensure unique slug & SKU
     let safeSlug = fullProduct.slug;
     const { data: existingSlug } = await supabase
       .from('products')
@@ -701,13 +903,12 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     if (prodErr) {
       if (prodErr.code === '42501') {
         throw new Error(
-          'Database permission denied (Supabase RLS): Sign in with your Supabase Owner account, add SUPABASE_SERVICE_ROLE_KEY in Vercel Environment Variables, or run supabase/fix_product_visibility_rls.sql in Supabase SQL Editor.'
+          'Database permission denied (Supabase RLS): Sign in with your Supabase Owner account or verify SUPABASE_SERVICE_ROLE_KEY.'
         );
       }
       throw new Error(`Failed to save product in database: ${prodErr.message}`);
     }
 
-    // 3. Sync product_images
     const imageRows = (fullProduct.images || [])
       .filter((img) => img && img.url && !img.url.startsWith('blob:'))
       .map((img, idx) => ({
@@ -727,7 +928,6 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       }
     }
 
-    // 4. Sync product_variants with unique SKUs
     const usedSkus = new Set<string>();
     const variantRows: Array<Record<string, any>> = [];
     const mainImgUrl = imageRows.find((i) => i.is_main)?.url || imageRows[0]?.url || null;
@@ -781,7 +981,6 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       }
     }
 
-    // 5. Verify saved product in Supabase
     const { data: verified, error: verifyErr } = await supabase
       .from('products')
       .select(ADMIN_PRODUCT_SELECT)
@@ -812,7 +1011,6 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       categories
     );
 
-    // Ensure product always has at least one valid public-ready image
     let productImages = (productData.images || []).filter(
       (i) => Boolean(i?.url) && !String(i.url).startsWith('blob:')
     );
@@ -840,7 +1038,6 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     const mainImgUrl = productImages.find((i) => i.is_main)?.url || productImages[0]?.url;
 
-    // Ensure variants have valid UUIDs and collision-free SKUs
     let productVariants = productData.variants || [];
     if (productVariants.length === 0) {
       productVariants = [
@@ -904,7 +1101,6 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       category: resolvedCat,
     };
 
-    // Persist in Shared Database FIRST before confirming save
     let savedProduct: Product | null = null;
     let apiErrorMsg = '';
 
@@ -931,7 +1127,6 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       apiErrorMsg = err?.message || '';
     }
 
-    // Fallback to direct client Supabase write if server did not complete Supabase write
     if (!savedProduct && isSupabaseConfigured()) {
       savedProduct = await persistProductViaSupabaseClient(fullProduct);
     }
@@ -959,6 +1154,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       )
     );
 
+    broadcastRealtimeSync('catalog');
     return savedProduct;
   };
 
@@ -996,7 +1192,6 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     return { synced, failed, error: lastErr };
   }, [unsyncedLocalProducts, refreshCatalog]);
 
-  // Auto-attempt one background sync when an admin opens the dashboard and has unsynced local products
   useEffect(() => {
     if (isAdmin && unsyncedLocalProducts.length > 0 && !autoSyncAttemptedRef.current) {
       autoSyncAttemptedRef.current = true;
@@ -1044,6 +1239,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setUnsyncedLocalProducts((prev) =>
       prev.filter((p) => p.id !== id && ensureValidUUID(p.id) !== validId)
     );
+    broadcastRealtimeSync('catalog');
   };
 
   const toggleProductStatus = async (id: string) => {
@@ -1109,10 +1305,11 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           : p
       )
     );
+    broadcastRealtimeSync('catalog');
   };
 
-  // Category Operations
-  const saveCategory = async (categoryData: Partial<Category>) => {
+  // Category / Collection Operations
+  const saveCategory = async (categoryData: Partial<Category>): Promise<Category> => {
     const spec =
       getCanonicalCategorySpec(categoryData.id) || getCanonicalCategorySpec(categoryData.slug);
     const id = spec ? spec.uuid : ensureValidUUID(categoryData.id, generateUUID);
@@ -1130,84 +1327,153 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       ? categoryData.parent_id
       : undefined;
 
-    const newCat: Category = {
+    let savedCategory: Category = {
       id,
-      name: (categoryData.name || 'New Category').trim(),
+      name: (categoryData.name || 'New Collection').trim(),
       slug,
       description: categoryData.description || '',
-      image_url: categoryData.image_url,
+      image_url: categoryData.image_url?.trim() || undefined,
       display_order: categoryData.display_order || categories.length + 1,
       parent_id: resolvedParentId,
     };
+
+    let persisted = false;
+    let apiErrMsg = '';
 
     try {
       const headers = await getAdminRequestHeaders();
       const res = await fetch('/api/categories', {
         method: 'POST',
         headers,
-        body: JSON.stringify({ category: newCat }),
+        body: JSON.stringify({ category: savedCategory }),
       });
-      if (!res.ok && isSupabaseConfigured()) {
-        // Seed top-level canonical categories first if needed
-        for (const c of CANONICAL_CATEGORIES.filter((item) => !item.parentUuid)) {
-          await supabase.from('categories').upsert(
-            {
-              id: c.uuid,
-              name: c.name,
-              slug: c.slug,
-              description: c.description,
-              display_order: c.displayOrder,
-              parent_id: null,
-            },
-            { onConflict: 'slug' }
-          );
+      const json = await res.json().catch(() => null);
+      if (res.ok && json?.success) {
+        if (json.category) {
+          savedCategory = {
+            ...savedCategory,
+            ...json.category,
+            parent_id: json.category.parent_id || undefined,
+            image_url: json.category.image_url || undefined,
+          };
         }
+        persisted = true;
+      } else if (json?.error) {
+        apiErrMsg = json.error;
+      }
+    } catch (err: any) {
+      apiErrMsg = err?.message || '';
+    }
+
+    if (!persisted && isSupabaseConfigured()) {
+      for (const c of CANONICAL_CATEGORIES.filter((item) => !item.parentUuid)) {
         await supabase.from('categories').upsert(
           {
-            id: newCat.id,
-            name: newCat.name,
-            slug: newCat.slug,
-            description: newCat.description || '',
-            image_url: newCat.image_url || null,
-            display_order: newCat.display_order,
-            parent_id: newCat.parent_id || null,
+            id: c.uuid,
+            name: c.name,
+            slug: c.slug,
+            description: c.description,
+            display_order: c.displayOrder,
+            parent_id: null,
           },
           { onConflict: 'slug' }
         );
       }
-    } catch (err) {
-      console.error('Save category notice:', err);
+      const { data: dbCat, error: dbErr } = await supabase
+        .from('categories')
+        .upsert(
+          {
+            id: savedCategory.id,
+            name: savedCategory.name,
+            slug: savedCategory.slug,
+            description: savedCategory.description || '',
+            image_url: savedCategory.image_url || null,
+            display_order: savedCategory.display_order,
+            parent_id: savedCategory.parent_id || null,
+          },
+          { onConflict: 'slug' }
+        )
+        .select('*')
+        .maybeSingle();
+
+      if (dbErr) {
+        throw new Error(`Failed to save collection in database: ${dbErr.message}`);
+      }
+      if (dbCat) {
+        savedCategory = {
+          ...savedCategory,
+          ...dbCat,
+          parent_id: dbCat.parent_id || undefined,
+          image_url: dbCat.image_url || undefined,
+        };
+      }
+      persisted = true;
+    }
+
+    if (!persisted && isSupabaseConfigured()) {
+      throw new Error(apiErrMsg || 'Failed to save collection in shared database.');
     }
 
     setCategories((prev) => {
-      const exists = prev.some((c) => c.id === id || c.slug === slug);
+      const exists = prev.some(
+        (c) =>
+          c.id === savedCategory.id ||
+          c.id === categoryData.id ||
+          c.slug === savedCategory.slug
+      );
       const next = exists
-        ? prev.map((c) => (c.id === id || c.slug === slug ? newCat : c))
-        : [...prev, newCat];
+        ? prev.map((c) =>
+            c.id === savedCategory.id ||
+            c.id === categoryData.id ||
+            c.slug === savedCategory.slug
+              ? savedCategory
+              : c
+          )
+        : [...prev, savedCategory];
       return normalizeCategoriesList(next);
     });
+
+    broadcastRealtimeSync('categories');
+    return savedCategory;
   };
 
   const deleteCategory = async (id: string) => {
+    let deleted = false;
+    let apiErrMsg = '';
+
     try {
       const headers = await getAdminRequestHeaders();
       const res = await fetch(`/api/categories?id=${encodeURIComponent(id)}`, {
         method: 'DELETE',
         headers,
       });
-      if (!res.ok && isSupabaseConfigured()) {
-        const spec = getCanonicalCategorySpec(id);
-        if (spec) {
-          await supabase.from('categories').delete().eq('slug', spec.slug);
-        } else if (isValidUUID(id)) {
-          await supabase.from('categories').delete().eq('id', id);
-        }
+      const json = await res.json().catch(() => null);
+      if (res.ok && json?.success) {
+        deleted = true;
+      } else if (json?.error) {
+        apiErrMsg = json.error;
       }
-    } catch (err) {
-      console.error('Delete category notice:', err);
+    } catch (err: any) {
+      apiErrMsg = err?.message || '';
     }
 
-    setCategories((prev) => prev.filter((c) => c.id !== id));
+    if (!deleted && isSupabaseConfigured()) {
+      const spec = getCanonicalCategorySpec(id);
+      const { error } = spec
+        ? await supabase.from('categories').delete().eq('slug', spec.slug)
+        : await supabase.from('categories').delete().eq('id', ensureValidUUID(id));
+      if (error) {
+        throw new Error(`Failed to delete collection: ${error.message}`);
+      }
+      deleted = true;
+    }
+
+    if (!deleted && isSupabaseConfigured()) {
+      throw new Error(apiErrMsg || 'Failed to delete collection from shared database.');
+    }
+
+    setCategories((prev) => prev.filter((c) => c.id !== id && ensureValidUUID(c.id) !== ensureValidUUID(id)));
+    broadcastRealtimeSync('categories');
   };
 
   // Inventory adjustment
@@ -1262,6 +1528,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             .eq('id', variantId);
         }
       }
+      broadcastRealtimeSync('catalog');
     } catch (err) {
       console.error('Inventory adjust exception:', err);
     }
@@ -1374,6 +1641,60 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setAppliedCoupon(null);
   };
 
+  const saveCoupon = async (couponData: Partial<Coupon>): Promise<Coupon> => {
+    const code = (couponData.code || '').trim().toUpperCase();
+    if (!code) {
+      throw new Error('Coupon code is required.');
+    }
+    const newCoupon: Coupon = {
+      id: ensureValidUUID(couponData.id, generateUUID),
+      code,
+      discount_type: couponData.discount_type === 'fixed' ? 'fixed' : 'percentage',
+      discount_value: Math.max(1, Number(couponData.discount_value) || 10),
+      min_order_amount: Math.max(0, Number(couponData.min_order_amount) || 0),
+      is_active: couponData.is_active !== false,
+      times_used: Math.max(0, Number(couponData.times_used) || 0),
+    };
+
+    const headers = await getAdminRequestHeaders();
+    const res = await fetch('/api/store?resource=coupons', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ coupon: newCoupon }),
+    });
+    const json = await res.json().catch(() => null);
+    const saved = (res.ok && json?.coupon ? json.coupon : newCoupon) as Coupon;
+
+    if (!res.ok && isSupabaseConfigured()) {
+      const { error } = await supabase.from('coupons').upsert(newCoupon, { onConflict: 'code' });
+      if (error) {
+        throw new Error(json?.error || error.message);
+      }
+    }
+
+    setCoupons((prev) => {
+      const exists = prev.some((c) => c.id === saved.id || c.code === saved.code);
+      return exists
+        ? prev.map((c) => (c.id === saved.id || c.code === saved.code ? saved : c))
+        : [saved, ...prev];
+    });
+    broadcastRealtimeSync('coupons');
+    return saved;
+  };
+
+  const deleteCoupon = async (id: string) => {
+    const headers = await getAdminRequestHeaders();
+    const res = await fetch(`/api/store?resource=coupons&id=${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+      headers,
+    });
+    if (!res.ok && isSupabaseConfigured()) {
+      await supabase.from('coupons').delete().eq('id', ensureValidUUID(id));
+    }
+    setCoupons((prev) => prev.filter((c) => c.id !== id && ensureValidUUID(c.id) !== ensureValidUUID(id)));
+    broadcastRealtimeSync('coupons');
+  };
+
   // Wishlist operations
   const toggleWishlist = (product: Product) => {
     setWishlist((prev) => {
@@ -1455,6 +1776,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const newOrder: Order = {
       id: orderId,
       order_number: orderNumber,
+      user_id: user && isValidUUID(user.id) ? user.id : undefined,
       customer_email: orderData.customerEmail,
       customer_phone: orderData.customerPhone,
       shipping_address: orderData.shippingAddress,
@@ -1471,23 +1793,45 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       items: orderItemsList,
     };
 
-    for (const item of cart) {
-      if (item.variant.id) {
-        adjustVariantStock(
-          item.variant.id,
-          -item.quantity,
-          `Customer Purchase Order #${orderNumber}`
-        );
-      }
-    }
+    // Optimistic local stock adjustment
+    setProducts((prev) =>
+      prev.map((p) => ({
+        ...p,
+        variants: p.variants?.map((v) => {
+          const bought = cart.find((ci) => ci.variant.id === v.id);
+          return bought
+            ? { ...v, stock_quantity: Math.max(0, v.stock_quantity - bought.quantity) }
+            : v;
+        }),
+      }))
+    );
 
     setOrders((prev) => [newOrder, ...prev]);
 
-    if (isSupabaseConfigured()) {
+    let persistedViaApi = false;
+    try {
+      const headers = await getCustomerAuthHeaders();
+      const apiRes = await fetch('/api/store?resource=orders', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          order: newOrder,
+          couponCode: appliedCoupon?.code,
+        }),
+      });
+      if (apiRes.ok) {
+        persistedViaApi = true;
+      }
+    } catch {
+      // fall through to direct Supabase insert
+    }
+
+    if (!persistedViaApi && isSupabaseConfigured()) {
       try {
         await supabase.from('orders').insert({
           id: newOrder.id,
           order_number: newOrder.order_number,
+          user_id: newOrder.user_id || null,
           customer_email: newOrder.customer_email,
           customer_phone: newOrder.customer_phone,
           shipping_address: newOrder.shipping_address,
@@ -1520,6 +1864,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       }
     }
 
+    broadcastRealtimeSync('orders');
+    broadcastRealtimeSync('catalog');
     clearCart();
     return { success: true, orderId, orderNumber };
   };
@@ -1530,44 +1876,83 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     trackingNumber?: string
   ) => {
     setOrders((prev) =>
-      prev.map((o) => {
-        if (o.id === orderId) {
-          const updated = {
-            ...o,
-            status,
-            tracking_number: trackingNumber || o.tracking_number,
-            updated_at: new Date().toISOString(),
-          };
-          if (isSupabaseConfigured()) {
-            supabase
-              .from('orders')
-              .update({ status, tracking_number: trackingNumber })
-              .eq('id', orderId);
-          }
-          return updated;
-        }
-        return o;
-      })
+      prev.map((o) =>
+        o.id === orderId
+          ? {
+              ...o,
+              status,
+              tracking_number: trackingNumber !== undefined ? trackingNumber : o.tracking_number,
+              updated_at: new Date().toISOString(),
+            }
+          : o
+      )
     );
+
+    try {
+      const headers = await getAdminRequestHeaders();
+      const res = await fetch('/api/store?resource=orders', {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({ orderId, status, tracking_number: trackingNumber }),
+      });
+      if (!res.ok && isSupabaseConfigured()) {
+        await supabase
+          .from('orders')
+          .update({ status, tracking_number: trackingNumber })
+          .eq('id', orderId);
+      }
+      broadcastRealtimeSync('orders');
+    } catch (err) {
+      console.error('Order status update error:', err);
+    }
   };
 
   const updatePaymentStatus = async (orderId: string, paymentStatus: PaymentStatus) => {
     setOrders((prev) =>
-      prev.map((o) => {
-        if (o.id === orderId) {
-          const updated = {
-            ...o,
-            payment_status: paymentStatus,
-            updated_at: new Date().toISOString(),
-          };
-          if (isSupabaseConfigured()) {
-            supabase.from('orders').update({ payment_status: paymentStatus }).eq('id', orderId);
-          }
-          return updated;
-        }
-        return o;
-      })
+      prev.map((o) =>
+        o.id === orderId
+          ? { ...o, payment_status: paymentStatus, updated_at: new Date().toISOString() }
+          : o
+      )
     );
+
+    try {
+      const headers = await getAdminRequestHeaders();
+      const res = await fetch('/api/store?resource=orders', {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({ orderId, payment_status: paymentStatus }),
+      });
+      if (!res.ok && isSupabaseConfigured()) {
+        await supabase.from('orders').update({ payment_status: paymentStatus }).eq('id', orderId);
+      }
+      broadcastRealtimeSync('orders');
+    } catch (err) {
+      console.error('Order payment status update error:', err);
+    }
+  };
+
+  const saveAddress = async (address: ShippingAddress) => {
+    setAddresses((prev) => [address, ...prev]);
+    try {
+      const headers = await getCustomerAuthHeaders();
+      if (headers.Authorization) {
+        const res = await fetch('/api/store?resource=addresses', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ address }),
+        });
+        if (res.ok) return;
+      }
+    } catch {
+      // fall through
+    }
+    if (isSupabaseConfigured() && user && isValidUUID(user.id)) {
+      await supabase.from('addresses').insert({
+        user_id: user.id,
+        ...address,
+      });
+    }
   };
 
   // Review
@@ -1580,6 +1965,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const newReview: Review = {
       id: generateUUID(),
       product_id: productId,
+      user_id: user && isValidUUID(user.id) ? user.id : undefined,
       reviewer_name: reviewerName,
       rating,
       comment,
@@ -1589,6 +1975,17 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     setReviews((prev) => [newReview, ...prev]);
 
+    try {
+      const res = await fetch('/api/store?resource=reviews', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ review: newReview }),
+      });
+      if (res.ok) return;
+    } catch {
+      // fall through
+    }
+
     if (isSupabaseConfigured() && isValidUUID(productId)) {
       await supabase.from('reviews').insert(newReview);
     }
@@ -1596,10 +1993,29 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   // Settings
   const updateStoreSettings = async (settings: Partial<StoreSettings>) => {
-    setStoreSettings((prev) => ({ ...prev, ...settings }));
-    if (isSupabaseConfigured()) {
-      await supabase.from('store_settings').upsert({ key: 'general', value: settings });
+    const mergedSettings = { ...storeSettings, ...settings };
+    setStoreSettings(mergedSettings);
+
+    let savedViaApi = false;
+    try {
+      const headers = await getAdminRequestHeaders();
+      const res = await fetch('/api/store?resource=settings', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ settings: mergedSettings }),
+      });
+      if (res.ok) {
+        savedViaApi = true;
+      }
+    } catch {
+      // fall through
     }
+
+    if (!savedViaApi && isSupabaseConfigured()) {
+      await supabase.from('store_settings').upsert({ key: 'general', value: mergedSettings });
+    }
+
+    broadcastRealtimeSync('settings');
   };
 
   // Contact
@@ -1621,6 +2037,17 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     setContactMessages((prev) => [newMsg, ...prev]);
 
+    try {
+      const res = await fetch('/api/store?resource=contact', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messageData: newMsg }),
+      });
+      if (res.ok) return;
+    } catch {
+      // fall through
+    }
+
     if (isSupabaseConfigured()) {
       await supabase.from('contact_messages').insert(newMsg);
     }
@@ -1636,6 +2063,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         orders,
         coupons,
         reviews,
+        addresses,
         storeSettings,
         contactMessages,
         inventoryLogs,
@@ -1657,11 +2085,14 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         clearCart,
         applyCoupon,
         removeCoupon,
+        saveCoupon,
+        deleteCoupon,
         toggleWishlist,
         isInWishlist,
         createOrder,
         updateOrderStatus,
         updatePaymentStatus,
+        saveAddress,
         addReview,
         updateStoreSettings,
         sendContactMessage,
