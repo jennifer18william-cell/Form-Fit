@@ -314,7 +314,7 @@ BEGIN
     )
     OR (
       auth.role() = 'authenticated'
-      AND lower(COALESCE(auth.jwt() ->> 'email', '')) = 'admin@formandfit.in'
+      AND lower(COALESCE(auth.jwt() ->> 'email', '')) IN ('admin@formandfit.in', 'owner@formandfit.in')
     )
   );
 END;
@@ -331,7 +331,7 @@ DECLARE
   assigned_role TEXT;
 BEGIN
   assigned_role := CASE
-    WHEN lower(COALESCE(NEW.email, '')) = 'admin@formandfit.in' THEN 'owner'
+    WHEN lower(COALESCE(NEW.email, '')) IN ('admin@formandfit.in', 'owner@formandfit.in') THEN 'owner'
     ELSE 'customer'
   END;
 
@@ -399,18 +399,23 @@ CREATE INDEX IF NOT EXISTS idx_product_variants_product_active
   ON public.product_variants (product_id, is_active);
 
 -- Public read access to published products & active categories ONLY
+DROP POLICY IF EXISTS "Public products viewable" ON public.products;
 CREATE POLICY "Public products viewable" ON public.products
   FOR SELECT USING (status = 'published' OR public.is_admin());
 
+DROP POLICY IF EXISTS "Admin product management" ON public.products;
 CREATE POLICY "Admin product management" ON public.products
   FOR ALL USING (public.is_admin()) WITH CHECK (public.is_admin());
 
+DROP POLICY IF EXISTS "Public categories viewable" ON public.categories;
 CREATE POLICY "Public categories viewable" ON public.categories
   FOR SELECT USING (true);
 
+DROP POLICY IF EXISTS "Admin category management" ON public.categories;
 CREATE POLICY "Admin category management" ON public.categories
   FOR ALL USING (public.is_admin()) WITH CHECK (public.is_admin());
 
+DROP POLICY IF EXISTS "Public product images viewable" ON public.product_images;
 CREATE POLICY "Public product images viewable" ON public.product_images
   FOR SELECT USING (
     EXISTS (
@@ -421,9 +426,11 @@ CREATE POLICY "Public product images viewable" ON public.product_images
     OR public.is_admin()
   );
 
+DROP POLICY IF EXISTS "Admin image management" ON public.product_images;
 CREATE POLICY "Admin image management" ON public.product_images
   FOR ALL USING (public.is_admin()) WITH CHECK (public.is_admin());
 
+DROP POLICY IF EXISTS "Public variants viewable" ON public.product_variants;
 CREATE POLICY "Public variants viewable" ON public.product_variants
   FOR SELECT USING (
     (
@@ -437,19 +444,27 @@ CREATE POLICY "Public variants viewable" ON public.product_variants
     OR public.is_admin()
   );
 
+DROP POLICY IF EXISTS "Admin variant management" ON public.product_variants;
 CREATE POLICY "Admin variant management" ON public.product_variants
   FOR ALL USING (public.is_admin()) WITH CHECK (public.is_admin());
 
 -- Customer & Profile Policies (Private)
+DROP POLICY IF EXISTS "Users access own profile" ON public.profiles;
 CREATE POLICY "Users access own profile" ON public.profiles
   FOR SELECT USING (auth.uid() = id OR public.is_admin());
 
+DROP POLICY IF EXISTS "Users insert own profile" ON public.profiles;
 CREATE POLICY "Users insert own profile" ON public.profiles
   FOR INSERT WITH CHECK (
     auth.uid() = id
-    AND (role = 'customer' OR lower(email) = 'admin@formandfit.in' OR public.is_admin())
+    AND (
+      role = 'customer'
+      OR lower(email) IN ('admin@formandfit.in', 'owner@formandfit.in')
+      OR public.is_admin()
+    )
   );
 
+DROP POLICY IF EXISTS "Users update own profile" ON public.profiles;
 CREATE POLICY "Users update own profile" ON public.profiles
   FOR UPDATE
   USING (auth.uid() = id OR public.is_admin())
@@ -458,21 +473,27 @@ CREATE POLICY "Users update own profile" ON public.profiles
     OR (auth.uid() = id AND role = (SELECT p.role FROM public.profiles p WHERE p.id = auth.uid()))
   );
 
+DROP POLICY IF EXISTS "Users view own roles" ON public.user_roles;
 CREATE POLICY "Users view own roles" ON public.user_roles
   FOR SELECT USING (auth.uid() = user_id OR public.is_admin());
 
+DROP POLICY IF EXISTS "Admin manage user roles" ON public.user_roles;
 CREATE POLICY "Admin manage user roles" ON public.user_roles
   FOR ALL USING (public.is_admin()) WITH CHECK (public.is_admin());
 
+DROP POLICY IF EXISTS "Users access own orders" ON public.orders;
 CREATE POLICY "Users access own orders" ON public.orders
   FOR SELECT USING (auth.uid() = user_id OR public.is_admin());
 
+DROP POLICY IF EXISTS "Users create orders" ON public.orders;
 CREATE POLICY "Users create orders" ON public.orders
   FOR INSERT WITH CHECK (true);
 
+DROP POLICY IF EXISTS "Admin manage orders" ON public.orders;
 CREATE POLICY "Admin manage orders" ON public.orders
   FOR ALL USING (public.is_admin()) WITH CHECK (public.is_admin());
 
+DROP POLICY IF EXISTS "Users access own order items" ON public.order_items;
 CREATE POLICY "Users access own order items" ON public.order_items
   FOR SELECT USING (
     EXISTS (
@@ -482,59 +503,82 @@ CREATE POLICY "Users access own order items" ON public.order_items
     )
   );
 
+DROP POLICY IF EXISTS "Users create order items" ON public.order_items;
 CREATE POLICY "Users create order items" ON public.order_items
   FOR INSERT WITH CHECK (true);
 
 -- Coupons Policies
+DROP POLICY IF EXISTS "Public active coupons viewable" ON public.coupons;
 CREATE POLICY "Public active coupons viewable" ON public.coupons
   FOR SELECT USING (is_active = true OR public.is_admin());
 
+DROP POLICY IF EXISTS "Admin manage coupons" ON public.coupons;
 CREATE POLICY "Admin manage coupons" ON public.coupons
   FOR ALL USING (public.is_admin()) WITH CHECK (public.is_admin());
 
 -- Wishlist Policies
+DROP POLICY IF EXISTS "Users manage own wishlist" ON public.wishlists;
 CREATE POLICY "Users manage own wishlist" ON public.wishlists
   FOR ALL USING (auth.uid() = user_id);
 
 -- Addresses Policies
+DROP POLICY IF EXISTS "Users manage own addresses" ON public.addresses;
 CREATE POLICY "Users manage own addresses" ON public.addresses
   FOR ALL USING (auth.uid() = user_id);
 
 -- Reviews Policies
+DROP POLICY IF EXISTS "Public view reviews" ON public.reviews;
 CREATE POLICY "Public view reviews" ON public.reviews
   FOR SELECT USING (true);
 
+DROP POLICY IF EXISTS "Authenticated create review" ON public.reviews;
 CREATE POLICY "Authenticated create review" ON public.reviews
   FOR INSERT WITH CHECK (auth.uid() = user_id);
 
 -- Store Settings & Homepage Sections Policies
+DROP POLICY IF EXISTS "Public view store settings" ON public.store_settings;
 CREATE POLICY "Public view store settings" ON public.store_settings
   FOR SELECT USING (true);
 
+DROP POLICY IF EXISTS "Admin manage store settings" ON public.store_settings;
 CREATE POLICY "Admin manage store settings" ON public.store_settings
   FOR ALL USING (public.is_admin()) WITH CHECK (public.is_admin());
 
+DROP POLICY IF EXISTS "Public view homepage sections" ON public.homepage_sections;
 CREATE POLICY "Public view homepage sections" ON public.homepage_sections
   FOR SELECT USING (is_active = true OR public.is_admin());
 
+DROP POLICY IF EXISTS "Admin manage homepage sections" ON public.homepage_sections;
 CREATE POLICY "Admin manage homepage sections" ON public.homepage_sections
   FOR ALL USING (public.is_admin()) WITH CHECK (public.is_admin());
 
 -- Contact Messages
+DROP POLICY IF EXISTS "Anyone can send message" ON public.contact_messages;
 CREATE POLICY "Anyone can send message" ON public.contact_messages
   FOR INSERT WITH CHECK (true);
 
+DROP POLICY IF EXISTS "Admin manage messages" ON public.contact_messages;
 CREATE POLICY "Admin manage messages" ON public.contact_messages
   FOR ALL USING (public.is_admin()) WITH CHECK (public.is_admin());
 
 -- Newsletter
+DROP POLICY IF EXISTS "Anyone subscribe newsletter" ON public.newsletter_subscribers;
 CREATE POLICY "Anyone subscribe newsletter" ON public.newsletter_subscribers
   FOR INSERT WITH CHECK (true);
 
+DROP POLICY IF EXISTS "Admin view newsletter" ON public.newsletter_subscribers;
 CREATE POLICY "Admin view newsletter" ON public.newsletter_subscribers
   FOR SELECT USING (public.is_admin());
 
 -- Column-level restriction: hide private `cost_price` from `anon` public visitors
+GRANT USAGE ON SCHEMA public TO anon, authenticated;
+GRANT SELECT ON public.categories TO anon, authenticated;
+GRANT SELECT ON public.product_images TO anon, authenticated;
+GRANT SELECT ON public.product_variants TO anon, authenticated;
+GRANT SELECT ON public.coupons TO anon, authenticated;
+GRANT SELECT ON public.store_settings TO anon, authenticated;
+GRANT SELECT ON public.reviews TO anon, authenticated;
+
 REVOKE SELECT ON public.products FROM anon;
 GRANT SELECT (
   id, name, slug, sku, short_desc, description, category_id,
@@ -549,16 +593,49 @@ INSERT INTO storage.buckets (id, name, public)
 VALUES ('product-images', 'product-images', true)
 ON CONFLICT (id) DO UPDATE SET public = true;
 
+DROP POLICY IF EXISTS "Public read product images bucket" ON storage.objects;
 CREATE POLICY "Public read product images bucket" ON storage.objects
   FOR SELECT USING (bucket_id = 'product-images');
 
+DROP POLICY IF EXISTS "Admin upload product images bucket" ON storage.objects;
 CREATE POLICY "Admin upload product images bucket" ON storage.objects
   FOR INSERT WITH CHECK (bucket_id = 'product-images' AND public.is_admin());
 
+DROP POLICY IF EXISTS "Admin update product images bucket" ON storage.objects;
 CREATE POLICY "Admin update product images bucket" ON storage.objects
   FOR UPDATE USING (bucket_id = 'product-images' AND public.is_admin())
   WITH CHECK (bucket_id = 'product-images' AND public.is_admin());
 
+DROP POLICY IF EXISTS "Admin delete product images bucket" ON storage.objects;
 CREATE POLICY "Admin delete product images bucket" ON storage.objects
   FOR DELETE USING (bucket_id = 'product-images' AND public.is_admin());
+
+-- Enable Supabase Realtime WebSockets on shared storefront tables
+DO $$
+DECLARE
+  tbl TEXT;
+BEGIN
+  FOREACH tbl IN ARRAY ARRAY[
+    'products',
+    'product_images',
+    'product_variants',
+    'categories',
+    'store_settings',
+    'coupons',
+    'orders',
+    'reviews'
+  ]
+  LOOP
+    IF NOT EXISTS (
+      SELECT 1
+      FROM pg_publication_tables
+      WHERE pubname = 'supabase_realtime'
+        AND schemaname = 'public'
+        AND tablename = tbl
+    ) THEN
+      EXECUTE format('ALTER PUBLICATION supabase_realtime ADD TABLE public.%I', tbl);
+    END IF;
+  END LOOP;
+END $$;
+
 
