@@ -1,11 +1,19 @@
 import React, { useState } from 'react';
-import { isSupabaseConfigured } from '../lib/supabase';
+import { isSupabaseConfigured, supabaseUrl } from '../lib/supabase';
 import { Database, CheckCircle2, AlertCircle, X } from 'lucide-react';
 
 export const SupabaseBanner: React.FC = () => {
   const [dismissed, setDismissed] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const configured = isSupabaseConfigured();
+  let connectedHost = '';
+  if (configured && supabaseUrl) {
+    try {
+      connectedHost = new URL(supabaseUrl).host;
+    } catch {
+      connectedHost = supabaseUrl;
+    }
+  }
 
   if (dismissed) return null;
 
@@ -24,7 +32,7 @@ export const SupabaseBanner: React.FC = () => {
             {configured ? (
               <span className="flex items-center gap-1.5">
                 <CheckCircle2 size={13} className="text-[#16A34A]" />
-                Connected to Live Supabase Backend &amp; Storage
+                Connected to Live Supabase Backend ({connectedHost})
               </span>
             ) : (
               <span className="flex items-center gap-1.5">
