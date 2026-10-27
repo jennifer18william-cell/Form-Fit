@@ -2,6 +2,20 @@ import { Product } from './index';
 
 export type MatchTier = 'exact_match' | 'very_similar' | 'alternative_style';
 
+export type CanonicalPatternType =
+  | 'plain/solid'
+  | 'stripes'
+  | 'checks'
+  | 'plaid'
+  | 'floral'
+  | 'polka dots'
+  | 'abstract print'
+  | 'graphic print'
+  | 'geometric'
+  | 'animal print'
+  | 'embroidered'
+  | 'textured';
+
 export interface StylistPreferences {
   gender?: string;
   occasion?: string;
@@ -16,13 +30,21 @@ export interface VisualGarmentAnalysis {
   isClothingDetected: boolean;
   summary: string;
   garmentType: string;
+  garmentSubcategory?: string;
   broadRole: 'top' | 'bottom' | 'one_piece' | 'outerwear' | 'footwear' | 'accessory' | 'other';
   genderFit: string;
+  primaryColor: string;
+  secondaryColors: string[];
   dominantColors: string[];
   colorCombination: string;
+  colorDistributionAndContrast?: string;
+  pattern: CanonicalPatternType | string;
+  patternScaleAndDetail?: string;
   patternOrPrint: string;
   fabricAppearance: string;
   silhouetteAndFit: string;
+  collarAndNeckline?: string;
+  sleeves?: string;
   sleeveAndNeckline: string;
   styleCategory: string;
   designDetails: string[];
@@ -39,6 +61,15 @@ export interface StylistProductRecommendation {
   effectivePrice: number;
   availableSizes: string[];
   availableColors: Array<{ name: string; hex?: string }>;
+}
+
+export interface VisualMatchGroups {
+  hasExactMatch: boolean;
+  hasStrongVisualMatch: boolean;
+  lowConfidenceMessage?: string | null;
+  closestMatches: StylistProductRecommendation[];
+  sameCategoryDifferentColor: StylistProductRecommendation[];
+  similarPatternOrDesign: StylistProductRecommendation[];
 }
 
 export interface StylistOutfitPiece {
@@ -93,6 +124,7 @@ export interface StylistApiResponse {
   preferences: StylistPreferences;
   followUpSuggestions: string[];
   visualAnalysis?: VisualGarmentAnalysis | null;
+  visualMatchGroups?: VisualMatchGroups | null;
   recommendations: StylistProductRecommendation[];
   outfit?: StylistOutfitSuggestion | null;
   pagination?: {
@@ -112,6 +144,7 @@ export interface StylistApiResponse {
     | 'DATABASE_NOT_CONFIGURED'
     | 'GEMINI_NOT_CONFIGURED'
     | 'GEMINI_QUOTA_OR_AUTH'
+    | 'VISION_ANALYSIS_FAILED'
     | 'SERVER_ERROR';
   retryAfterSeconds?: number;
 }

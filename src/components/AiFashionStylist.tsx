@@ -24,11 +24,13 @@ import {
   StylistPreferences,
   StylistProductRecommendation,
   VisualGarmentAnalysis,
+  VisualMatchGroups,
 } from '../types/stylist';
 import {
   CompleteOutfitCard,
   ProductRecommendationCard,
   VisualAnalysisSummary,
+  VisualMatchResultsSection,
 } from './stylist/StylistCards';
 
 interface ChatMessageItem {
@@ -37,6 +39,7 @@ interface ChatMessageItem {
   content: string;
   imagePreviewUrl?: string;
   visualAnalysis?: VisualGarmentAnalysis | null;
+  visualMatchGroups?: VisualMatchGroups | null;
   recommendations?: StylistProductRecommendation[];
   outfit?: StylistOutfitSuggestion | null;
   followUpSuggestions?: string[];
@@ -170,12 +173,15 @@ export const AiFashionStylist: React.FC = () => {
     }
   }, []);
 
-  // Persist session preferences & transcript (excluding large data URLs)
+  // Persist session preferences & transcript (retaining compact preview thumbnails under 90 KB)
   useEffect(() => {
     try {
       const compactMessages = messages.slice(-16).map((m) => ({
         ...m,
-        imagePreviewUrl: undefined,
+        imagePreviewUrl:
+          m.imagePreviewUrl && m.imagePreviewUrl.length < 90_000
+            ? m.imagePreviewUrl
+            : undefined,
       }));
       sessionStorage.setItem(
         SESSION_STORAGE_KEY,
@@ -471,7 +477,7 @@ export const AiFashionStylist: React.FC = () => {
       image: imageToSend ? imageToSend.payload : null,
       mode: requestMode,
       offset: 0,
-      limit: 4,
+      limit: 6,
     };
 
     try {
@@ -511,6 +517,7 @@ export const AiFashionStylist: React.FC = () => {
         role: 'assistant',
         content: data.reply,
         visualAnalysis: data.visualAnalysis || null,
+        visualMatchGroups: data.visualMatchGroups || null,
         recommendations: data.recommendations || [],
         outfit: data.outfit || null,
         followUpSuggestions: data.followUpSuggestions || [],
@@ -865,55 +872,35 @@ export const AiFashionStylist: React.FC = () => {
                       </div>
                     )}
 
-                    {/* Product Recommendations from Real Catalog */}
-                    {!isUser && msg.recommendations && msg.recommendations.length > 0 && (
-                      <div className="mt-2.5 w-full space-y-2.5">
-                        {msg.recommendations.map((rec) => (
-                          <ProductRecommendationCard
-                            key={`${msg.id}-${rec.product.id}`}
-                            recommendation={rec}
-                            preferredSize={preferences.preferredSize}
-                          />
-                        ))}
-
-                        {/* Pagination: Show more matches */}
-                        {msg.pagination?.hasMore && (
-                          <button
-                            type="button"
-                            onClick={() => handleLoadMoreMatches(msg.id)}
-                            disabled={msg.loadingMore}
-                            className="w-full rounded-xl border border-[#D6D5CE] bg-white py-2 px-3 text-xs font-semibold text-[#18181B] hover:bg-[#F4F3EF] transition-colors cursor-pointer disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#65A30D]"
-                          >
-                            {msg.loadingMore ? (
-                              <span className="inline-flex items-center gap-1.5">
-                                <Loader2 size={13} className="animate-spin" />
-                                <span>Loading more catalog matches...</span>
-                              </span>
-                            ) : (
-                              <span>
-                                Show more matches ({msg.pagination.totalEligible - msg.recommendations.length}{' '}
-                                more)
-                              </span>
-                            )}
-                          </button>
-                        )}
-
-                        {/* Start New Visual Search Convenience Action */}
-                        {msg.visualAnalysis && (
-                          <div className="flex items-center justify-end">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setPendingImage(null);
-                                setVisualTrayOpen(true);
-                              }}
-                              className="text-[11px] font-medium text-[#3F6212] hover:underline cursor-pointer"
-                            >
-                              Upload another photo to search
-                            </button>
-                          </div>
-                        )}
-                      </div>
+                    {/* Dedicated Visual Match Results ("Closest Matches" + Low-Confidence Options) */}
+                    {!isUser && msg.visualMatchGroups ? (
+                      <VisualMatchResultsSection
+                        groups={msg.visualMatchGroups}
+                        recommendations={msg.recommendations || []}
+                        preferredSize={preferences.preferredSize}
+                        pagination={msg.pagination}
+                        loadingMore={msg.loadingMore}
+                        onLoadMore={() => handleLoadMoreMatches(msg.id)}
+                        onUploadAnother={() => {
+                          setPendingImage(null);
+                          setVisualTrayOpen(true);
+                        }}
+                      />
+                    ) : (
+                      /* Standard Conversational Product Recommendations */
+                      !isUser &&
+                      msg.recommendations &&
+                      msg.recommendations.length > 0 && (
+                        <div className="mt-2.5 w-full space-y-2.5">
+                          {msg.recommendations.map((rec) => (
+                            <ProductRecommendationCard
+                              key={`${msg.id}-${rec.product.id}`}
+                              recommendation={rec}
+                              preferredSize={preferences.preferredSize}
+                            />
+                          ))}
+                        </div>
+                      )
                     )}
 
                     {/* Complete Outfit Builder Card */}

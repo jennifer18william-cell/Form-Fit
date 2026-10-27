@@ -1,6 +1,9 @@
 import { GoogleGenAI, ThinkingLevel, Type } from '@google/genai';
 import { createClient } from '@supabase/supabase-js';
 import crypto from 'crypto';
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
 import {
   applyNoStoreHeaders,
   getSupabaseEnvConfig,
@@ -20,20 +23,29 @@ import {
   StylistPreferences,
   StylistProductRecommendation,
   VisualGarmentAnalysis,
+  VisualMatchGroups,
 } from '../../src/types/stylist';
 
 // ============================================================================
-// RATE LIMITING & SECURITY CONSTANTS
+// CONFIGURABLE THRESHOLDS & SECURITY CONSTANTS
 // ============================================================================
 const RATE_LIMIT_WINDOW_MS = 60_000;
-const RATE_LIMIT_MAX_REQUESTS = 25;
+const RATE_LIMIT_MAX_REQUESTS = 30;
 const MAX_IMAGE_BYTES = 6 * 1024 * 1024; // 6 MB decoded binary limit
 const ALLOWED_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 
-const FLASH_MODEL_CASCADE = [
-  { model: 'gemini-3.8-flash', thinkingLevel: ThinkingLevel.LOW },
-  { model: 'gemini-flash-latest', thinkingLevel: ThinkingLevel.LOW },
-  { model: 'gemini-3.1-flash-lite', thinkingLevel: ThinkingLevel.MINIMAL },
+function getMatchThresholds() {
+  const exact = Math.max(70, Math.min(98, Number(process.env.STYLIST_EXACT_MATCH_THRESHOLD || 82)));
+  const strong = Math.max(45, Math.min(exact - 5, Number(process.env.STYLIST_STRONG_MATCH_THRESHOLD || 58)));
+  const initialLimit = Math.max(1, Math.min(6, Number(process.env.STYLIST_INITIAL_MATCH_LIMIT || 6)));
+  return { exact, strong, initialLimit };
+}
+
+// Fast vision & structured JSON cascade (gemini-3.1-flash-lite is primary for low-latency ~2s multimodal vision)
+const VISION_AND_JSON_MODELS = [
+  { model: 'gemini-3.1-flash-lite', thinkingLevel: ThinkingLevel.MINIMAL, wallClockMs: 11000 },
+  { model: 'gemini-3.8-flash', thinkingLevel: ThinkingLevel.LOW, wallClockMs: 11000 },
+  { model: 'gemini-flash-latest', thinkingLevel: ThinkingLevel.LOW, wallClockMs: 11000 },
 ] as const;
 
 interface RateBucket {
@@ -41,65 +53,247 @@ interface RateBucket {
 }
 
 const ipRateBuckets = new Map<string, RateBucket>();
+const modelCooldownUntil = new Map<string, number>();
 
-// In-memory caches for product & prototype embeddings
-const productEmbeddingCache = new Map<string, number[]>();
-const prototypeEmbeddingCache = new Map<string, number[]>();
+// Server-side caches keyed by `${productId}:${imageHash}` so catalog images are visually indexed once
+const catalogVisualProfileCache = new Map<string, VisualGarmentAnalysis>();
+const catalogPureImageEmbeddingCache = new Map<string, number[]>();
+const catalogTextEmbeddingCache = new Map<string, number[]>();
 
-const COLOR_FAMILIES: Record<string, string[]> = {
-  black: ['black', 'jet', 'onyx', 'obsidian', 'pitch', 'noir', 'carbon'],
-  white: ['white', 'ivory', 'off-white', 'chalk', 'snow', 'pearl', 'milk', 'alabaster'],
-  neutral_beige: [
-    'beige',
-    'cream',
-    'ecru',
-    'sand',
-    'oatmeal',
-    'tan',
-    'camel',
-    'taupe',
-    'khaki',
-    'stone',
-    'latte',
-    'nude',
-    'champagne',
-    'fawn',
-  ],
-  grey: ['grey', 'gray', 'charcoal', 'slate', 'ash', 'heather', 'silver', 'graphite', 'smoke'],
-  green: ['green', 'olive', 'sage', 'lime', 'emerald', 'forest', 'mint', 'moss', 'pistachio', 'pine', 'teal'],
-  blue: ['blue', 'navy', 'indigo', 'cobalt', 'sky', 'denim', 'azure', 'midnight', 'royal', 'cyan'],
-  brown: ['brown', 'chocolate', 'espresso', 'mocha', 'rust', 'terracotta', 'cognac', 'walnut', 'coffee'],
-  red: ['red', 'crimson', 'burgundy', 'maroon', 'wine', 'scarlet', 'cherry', 'brick', 'oxblood'],
-  pink: ['pink', 'blush', 'rose', 'magenta', 'fuchsia', 'coral', 'peach', 'salmon', 'mauve'],
-  purple: ['purple', 'lavender', 'lilac', 'plum', 'violet', 'amethyst', 'berry'],
-  yellow_orange: ['yellow', 'mustard', 'gold', 'amber', 'ochre', 'orange', 'tangerine', 'apricot'],
-};
+const DISK_VISUAL_CACHE_PATH = path.join(os.tmpdir(), 'formfit_catalog_visual_cache_v1.json');
+let diskVisualCacheLoaded = false;
 
-const COMPLEMENTARY_COLOR_FAMILIES: Record<string, string[]> = {
-  neutral_beige: ['black', 'white', 'brown', 'green', 'blue', 'grey'],
-  black: ['white', 'neutral_beige', 'grey', 'green', 'blue', 'red'],
-  white: ['black', 'blue', 'neutral_beige', 'green', 'brown', 'grey'],
-  grey: ['black', 'white', 'blue', 'green', 'red', 'pink'],
-  blue: ['white', 'neutral_beige', 'grey', 'black', 'brown'],
-  green: ['neutral_beige', 'white', 'black', 'brown', 'blue'],
-  brown: ['neutral_beige', 'white', 'green', 'blue', 'black'],
-  red: ['black', 'white', 'blue', 'neutral_beige', 'grey'],
-  pink: ['white', 'grey', 'blue', 'neutral_beige', 'black'],
-  purple: ['white', 'black', 'grey', 'neutral_beige'],
-  yellow_orange: ['blue', 'white', 'black', 'neutral_beige', 'brown'],
-};
+function loadDiskVisualCacheOnce(): void {
+  if (diskVisualCacheLoaded) return;
+  diskVisualCacheLoaded = true;
+  try {
+    if (!fs.existsSync(DISK_VISUAL_CACHE_PATH)) return;
+    const raw = JSON.parse(fs.readFileSync(DISK_VISUAL_CACHE_PATH, 'utf8'));
+    if (raw?.profiles && typeof raw.profiles === 'object') {
+      for (const [k, v] of Object.entries(raw.profiles)) {
+        if (v && typeof v === 'object') {
+          catalogVisualProfileCache.set(k, v as VisualGarmentAnalysis);
+        }
+      }
+    }
+    if (raw?.embeddings && typeof raw.embeddings === 'object') {
+      for (const [k, v] of Object.entries(raw.embeddings)) {
+        if (Array.isArray(v) && v.length > 0) {
+          catalogPureImageEmbeddingCache.set(k, v as number[]);
+        }
+      }
+    }
+  } catch {
+    // Ignore corrupt or missing tmp cache
+  }
+}
+
+function saveDiskVisualCache(): void {
+  try {
+    const profiles: Record<string, VisualGarmentAnalysis> = {};
+    for (const [k, v] of catalogVisualProfileCache.entries()) {
+      profiles[k] = v;
+    }
+    const embeddings: Record<string, number[]> = {};
+    for (const [k, v] of catalogPureImageEmbeddingCache.entries()) {
+      embeddings[k] = v;
+    }
+    fs.writeFileSync(DISK_VISUAL_CACHE_PATH, JSON.stringify({ profiles, embeddings }), 'utf8');
+  } catch {
+    // Ignore read-only fs errors
+  }
+}
 
 // ============================================================================
-// SERVER HELPERS
+// COLOR & PATTERN TAXONOMY FOR STRICT FASHION MATCHING
+// ============================================================================
+const COLOR_FAMILIES: Record<string, string[]> = {
+  navy: ['navy', 'navy blue', 'midnight blue', 'dark blue', 'indigo', 'ink blue'],
+  blue: ['blue', 'cobalt', 'royal blue', 'sky blue', 'baby blue', 'powder blue', 'denim blue', 'azure', 'cyan', 'light blue', 'slate blue', 'teal'],
+  black: ['black', 'jet black', 'onyx', 'obsidian', 'pitch black', 'noir', 'carbon'],
+  white: ['white', 'pure white', 'optic white', 'chalk', 'snow', 'milk', 'alabaster', 'off-white', 'ivory'],
+  beige: ['beige', 'cream', 'ecru', 'sand', 'oatmeal', 'tan', 'camel', 'taupe', 'khaki', 'stone', 'latte', 'nude', 'champagne', 'fawn', 'light tan'],
+  grey: ['grey', 'gray', 'charcoal', 'slate', 'ash', 'heather', 'silver', 'graphite', 'smoke'],
+  green: ['green', 'olive', 'sage', 'lime', 'emerald', 'forest green', 'mint', 'moss', 'pistachio', 'pine', 'khaki green'],
+  brown: ['brown', 'chocolate', 'espresso', 'mocha', 'rust', 'terracotta', 'cognac', 'walnut', 'chestnut', 'coffee', 'umber', 'maroon-brown'],
+  red: ['red', 'crimson', 'burgundy', 'maroon', 'wine', 'scarlet', 'cherry', 'brick', 'oxblood', 'ruby'],
+  pink: ['pink', 'blush', 'rose', 'magenta', 'fuchsia', 'coral', 'peach', 'salmon', 'mauve', 'dusty pink'],
+  purple: ['purple', 'lavender', 'lilac', 'plum', 'violet', 'amethyst', 'grape', 'berry'],
+  yellow_orange: ['yellow', 'mustard', 'gold', 'amber', 'ochre', 'orange', 'tangerine', 'apricot', 'lemon', 'butter'],
+};
+
+// Adjacent color families receive partial credit instead of a harsh conflict penalty
+const ADJACENT_COLOR_FAMILIES: Record<string, string[]> = {
+  navy: ['blue'],
+  blue: ['navy'],
+  white: ['beige'],
+  beige: ['white', 'brown'],
+  brown: ['beige'],
+  black: ['grey'],
+  grey: ['black'],
+  red: ['pink'],
+  pink: ['red'],
+};
+
+const COMPLEMENTARY_OUTFIT_COLORS: Record<string, string[]> = {
+  beige: ['black', 'white', 'brown', 'green', 'navy', 'blue', 'grey'],
+  navy: ['white', 'beige', 'grey', 'brown', 'blue'],
+  blue: ['white', 'beige', 'grey', 'black', 'brown', 'navy'],
+  black: ['white', 'beige', 'grey', 'green', 'blue', 'red'],
+  white: ['black', 'navy', 'blue', 'beige', 'green', 'brown', 'grey'],
+  grey: ['black', 'white', 'navy', 'blue', 'green', 'red', 'pink'],
+  green: ['beige', 'white', 'black', 'brown', 'navy'],
+  brown: ['beige', 'white', 'green', 'blue', 'navy', 'black'],
+  red: ['black', 'white', 'navy', 'blue', 'beige', 'grey'],
+  pink: ['white', 'grey', 'navy', 'blue', 'beige', 'black'],
+  purple: ['white', 'black', 'grey', 'beige'],
+  yellow_orange: ['navy', 'blue', 'white', 'black', 'beige', 'brown'],
+};
+
+type PatternGroup =
+  | 'solid'
+  | 'stripes'
+  | 'checks'
+  | 'floral'
+  | 'polka_dots'
+  | 'graphic_print'
+  | 'abstract_geometric'
+  | 'animal_print'
+  | 'embroidered_textured';
+
+function normalizePatternGroup(rawPattern: string, detail = ''): PatternGroup {
+  const s = `${rawPattern} ${detail}`.toLowerCase();
+  if (/\b(stripe|striped|stripes|pinstripe|vertical stripe|horizontal stripe)\b/.test(s)) {
+    return 'stripes';
+  }
+  if (/\b(check|checked|checks|checkered|plaid|gingham|tartan|houndstooth|windowpane|buffalo)\b/.test(s)) {
+    return 'checks';
+  }
+  if (/\b(floral|flower|flowers|botanical|rose|daisy|blossom|floral lace)\b/.test(s)) {
+    return 'floral';
+  }
+  if (/\b(polka|dot|dotted|dots)\b/.test(s)) {
+    return 'polka_dots';
+  }
+  if (/\b(animal|leopard|zebra|cheetah|snake|python|tiger)\b/.test(s)) {
+    return 'animal_print';
+  }
+  if (/\b(graphic|logo|slogan|illustration|typography|cartoon|band|back print|chest print)\b/.test(s)) {
+    return 'graphic_print';
+  }
+  if (/\b(abstract|geometric|paisley|tie-dye|tie dye|camo|camouflage|motif|all-over print|printed|block print)\b/.test(s)) {
+    return 'abstract_geometric';
+  }
+  if (/\b(embroider|embroidered|embroidery|lace| eyelet|cable knit|ribbed|jacquard|waffle|textured)\b/.test(s)) {
+    return 'embroidered_textured';
+  }
+  return 'solid';
+}
+
+type GarmentSubcategory =
+  | 'button_shirt'
+  | 'tshirt_top'
+  | 'knit_hoodie'
+  | 'ethnic_top'
+  | 'outerwear'
+  | 'jeans_denim'
+  | 'trousers_chinos'
+  | 'skirt'
+  | 'shorts'
+  | 'dress_onepiece'
+  | 'sneakers_shoes'
+  | 'sandals_heels'
+  | 'boots_loafers'
+  | 'bag_accessory'
+  | 'other';
+
+function normalizeGarmentSubcategory(
+  garmentType: string,
+  broadRole: string,
+  extraText = ''
+): GarmentSubcategory {
+  const s = `${garmentType} ${extraText}`.toLowerCase();
+
+  if (/\b(dress|gown|maxi|midi|mini dress|sundress|jumpsuit|romper|anarkali|saree|co-ord)\b/.test(s)) {
+    return 'dress_onepiece';
+  }
+  if (/\b(wedge|sandal|sandals|heel|heels|stiletto|mule|mules|pump|pumps|slider|slides|flip-flop)\b/.test(s)) {
+    return 'sandals_heels';
+  }
+  if (/\b(boot|boots|chelsea|loafer|loafers|oxford shoe|derby|brogue|moccasin)\b/.test(s)) {
+    return 'boots_loafers';
+  }
+  if (/\b(sneaker|sneakers|trainer|trainers|running shoe|tennis shoe|lace-up shoe|casual shoe|shoes|footwear)\b/.test(s)) {
+    return 'sneakers_shoes';
+  }
+  if (/\b(bag|tote|handbag|backpack|wallet|belt|cap|hat|sunglass|sunglasses|watch|scarf|jewelry|necklace)\b/.test(s)) {
+    return 'bag_accessory';
+  }
+  if (/\b(jacket|blazer|coat|trench|bomber|windbreaker|cardigan|overcoat|gilet|vest|shacket)\b/.test(s)) {
+    return 'outerwear';
+  }
+  if (/\b(skirt|mini skirt|midi skirt|pleated skirt)\b/.test(s)) {
+    return 'skirt';
+  }
+  if (/\b(short|shorts|bermuda)\b/.test(s)) {
+    return 'shorts';
+  }
+  if (/\b(jean|jeans|denim)\b/.test(s)) {
+    return 'jeans_denim';
+  }
+  if (/\b(trouser|trousers|pant|pants|chino|chinos|cargo|cargos|jogger|joggers|palazzo|legging|leggings)\b/.test(s)) {
+    return 'trousers_chinos';
+  }
+  if (/\b(kurta|kurti|sherwani|nehru|tunic)\b/.test(s)) {
+    return 'ethnic_top';
+  }
+  if (/\b(hoodie|sweatshirt|sweater|pullover|jumper|knitwear)\b/.test(s)) {
+    return 'knit_hoodie';
+  }
+  if (/\b(t-shirt|tshirt|tee|tank|camisole|crop top|polo|henley|jersey)\b/.test(s)) {
+    return 'tshirt_top';
+  }
+  if (/\b(shirt|dress shirt|button-down|button down|button-up|oxford shirt|linen shirt|flannel|blouse|top)\b/.test(s)) {
+    return 'button_shirt';
+  }
+
+  if (broadRole === 'one_piece') return 'dress_onepiece';
+  if (broadRole === 'footwear') return 'sneakers_shoes';
+  if (broadRole === 'outerwear') return 'outerwear';
+  if (broadRole === 'bottom') return 'trousers_chinos';
+  if (broadRole === 'accessory') return 'bag_accessory';
+  if (broadRole === 'top') return 'tshirt_top';
+  return 'other';
+}
+
+function resolvePrimaryColorFamilies(colorText: string): string[] {
+  const lower = (colorText || '').toLowerCase().trim();
+  if (!lower) return [];
+  const hits: string[] = [];
+  // Check longer multi-word color terms first (e.g. "navy blue" before "blue")
+  for (const [family, synonyms] of Object.entries(COLOR_FAMILIES)) {
+    const sorted = [...synonyms].sort((a, b) => b.length - a.length);
+    for (const term of sorted) {
+      if (new RegExp(`\\b${term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(lower)) {
+        hits.push(family);
+        break;
+      }
+    }
+  }
+  // If both 'navy' and 'blue' matched because of "navy blue", prioritize 'navy'
+  if (hits.includes('navy') && hits.includes('blue') && /\bnavy\b/.test(lower)) {
+    return hits.filter((h) => h !== 'blue');
+  }
+  return hits;
+}
+
+// ============================================================================
+// SERVER REQUEST, RATE LIMIT & VALIDATION HELPERS
 // ============================================================================
 function getClientIp(req: any): string {
   const xff = req?.headers?.['x-forwarded-for'];
-  if (typeof xff === 'string' && xff.trim()) {
-    return xff.split(',')[0].trim();
-  }
-  if (Array.isArray(xff) && xff[0]) {
-    return String(xff[0]).split(',')[0].trim();
-  }
+  if (typeof xff === 'string' && xff.trim()) return xff.split(',')[0].trim();
+  if (Array.isArray(xff) && xff[0]) return String(xff[0]).split(',')[0].trim();
   return req?.socket?.remoteAddress || req?.ip || 'anonymous-client';
 }
 
@@ -112,17 +306,14 @@ function checkRateLimit(ip: string): { allowed: boolean; retryAfterSeconds: numb
       else bucket.timestamps = fresh;
     }
   }
-
   const existing = ipRateBuckets.get(ip) || { timestamps: [] };
   existing.timestamps = existing.timestamps.filter((t) => now - t < RATE_LIMIT_WINDOW_MS);
-
   if (existing.timestamps.length >= RATE_LIMIT_MAX_REQUESTS) {
     const oldest = existing.timestamps[0];
     const retryAfterSeconds = Math.max(1, Math.ceil((RATE_LIMIT_WINDOW_MS - (now - oldest)) / 1000));
     ipRateBuckets.set(ip, existing);
     return { allowed: false, retryAfterSeconds };
   }
-
   existing.timestamps.push(now);
   ipRateBuckets.set(ip, existing);
   return { allowed: true, retryAfterSeconds: 0 };
@@ -168,9 +359,7 @@ async function parseJsonBody(req: any): Promise<StylistApiRequest> {
   return {};
 }
 
-const modelCooldownUntil = new Map<string, number>();
-
-function getGeminiClient(timeoutMs = 12000): GoogleGenAI | null {
+function getGeminiClient(timeoutMs = 14000): GoogleGenAI | null {
   const rawKey = (process.env.GEMINI_API_KEY || '').trim();
   if (!rawKey || rawKey === 'YOUR_GEMINI_API_KEY') {
     return null;
@@ -193,10 +382,12 @@ function isTransientCapacityError(err: any): boolean {
   const status = Number(err?.status || err?.code || 0);
   const msg = String(err?.message || '');
   return (
+    status === 429 ||
     status === 500 ||
     status === 502 ||
     status === 503 ||
     status === 504 ||
+    msg.includes('RESOURCE_EXHAUSTED') ||
     msg.includes('UNAVAILABLE') ||
     msg.includes('DEADLINE_EXCEEDED') ||
     msg.includes('Deadline expired') ||
@@ -208,11 +399,13 @@ function isTransientCapacityError(err: any): boolean {
   );
 }
 
+function sleepMs(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 function withWallClockTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   return new Promise<T>((resolve, reject) => {
-    const timer = setTimeout(() => {
-      reject(new Error('WALL_CLOCK_TIMEOUT'));
-    }, ms);
+    const timer = setTimeout(() => reject(new Error('WALL_CLOCK_TIMEOUT')), ms);
     promise.then(
       (val) => {
         clearTimeout(timer);
@@ -231,43 +424,54 @@ async function generateStructuredJsonWithFailover(
   contents: any,
   systemInstruction: string,
   responseSchema: any,
-  temperature = 0.25
+  temperature = 0.15
 ): Promise<any | null> {
   let lastErr: any = null;
   const now = Date.now();
 
-  for (const candidate of FLASH_MODEL_CASCADE) {
-    const cooldown = modelCooldownUntil.get(candidate.model) || 0;
-    if (cooldown > now) {
-      continue;
-    }
+  const availableCandidates = VISION_AND_JSON_MODELS.filter(
+    (c) => (modelCooldownUntil.get(c.model) || 0) <= now
+  );
+  // Never lock out all models simultaneously; always include primary flash-lite if all were recently cooled
+  const candidatesToTry =
+    availableCandidates.length > 0 ? availableCandidates : [VISION_AND_JSON_MODELS[0]];
 
-    try {
-      const res = await withWallClockTimeout(
-        ai.models.generateContent({
-          model: candidate.model,
-          contents,
-          config: {
-            systemInstruction,
-            temperature,
-            thinkingConfig: { thinkingLevel: candidate.thinkingLevel },
-            responseMimeType: 'application/json',
-            responseSchema,
-          },
-        }),
-        5500
-      );
-      modelCooldownUntil.delete(candidate.model);
-      const text = (res.text || '').trim();
-      if (text) {
-        return JSON.parse(text);
+  for (let idx = 0; idx < candidatesToTry.length; idx++) {
+    const candidate = candidatesToTry[idx];
+    const maxAttempts = candidate.model === 'gemini-3.1-flash-lite' ? 2 : 1;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        const res = await withWallClockTimeout(
+          ai.models.generateContent({
+            model: candidate.model,
+            contents,
+            config: {
+              systemInstruction,
+              temperature,
+              thinkingConfig: { thinkingLevel: candidate.thinkingLevel },
+              responseMimeType: 'application/json',
+              responseSchema,
+            },
+          }),
+          candidate.wallClockMs
+        );
+        modelCooldownUntil.delete(candidate.model);
+        const text = (res.text || '').trim();
+        if (text) {
+          return JSON.parse(text);
+        }
+      } catch (err: any) {
+        lastErr = err;
+        if (!isTransientCapacityError(err)) {
+          throw err;
+        }
+        if (attempt < maxAttempts) {
+          await sleepMs(1100);
+          continue;
+        }
+        modelCooldownUntil.set(candidate.model, Date.now() + 5_000);
       }
-    } catch (err: any) {
-      lastErr = err;
-      if (!isTransientCapacityError(err)) {
-        throw err;
-      }
-      modelCooldownUntil.set(candidate.model, Date.now() + 45_000);
     }
   }
 
@@ -314,8 +518,7 @@ function validateAndSanitizeImage(
 
   let byteLength = 0;
   try {
-    const buf = Buffer.from(cleanedBase64, 'base64');
-    byteLength = buf.byteLength;
+    byteLength = Buffer.from(cleanedBase64, 'base64').byteLength;
   } catch {
     return {
       valid: false,
@@ -355,7 +558,7 @@ function validateAndSanitizeImage(
 }
 
 // ============================================================================
-// CATALOG RETRIEVAL & NORMALIZATION (PUBLIC PUBLISHED SOURCE OF TRUTH)
+// CATALOG RETRIEVAL & PRODUCT IMAGE EXTRACTION (SUPPORTS DATA URIS & HTTP URLS)
 // ============================================================================
 interface EnrichedCatalogItem {
   product: Product;
@@ -368,9 +571,12 @@ interface EnrichedCatalogItem {
   searchableText: string;
   colorFamilies: string[];
   mainImageUrl: string;
+  hasRealCatalogImage: boolean;
+  imageSignature: string;
+  visualProfile?: VisualGarmentAnalysis;
 }
 
-function inferBroadRole(product: Product): EnrichedCatalogItem['broadRole'] {
+function inferBroadRoleFromMetadata(product: Product): EnrichedCatalogItem['broadRole'] {
   const hay = [
     product.name,
     product.category?.name,
@@ -385,7 +591,7 @@ function inferBroadRole(product: Product): EnrichedCatalogItem['broadRole'] {
 
   if (
     product.gender_collection === 'Footwear' ||
-    /\b(shoe|shoes|sneaker|sneakers|loafer|loafers|boot|boots|sandal|sandals|heel|heels|footwear|slides|sliders|mule|mules)\b/.test(
+    /\b(shoe|shoes|sneaker|sneakers|loafer|loafers|boot|boots|sandal|sandals|wedge|wedges|heel|heels|footwear|slides|sliders|mule|mules)\b/.test(
       hay
     )
   ) {
@@ -422,18 +628,55 @@ function inferBroadRole(product: Product): EnrichedCatalogItem['broadRole'] {
   return 'other';
 }
 
-function detectColorFamilies(text: string): string[] {
-  const lower = text.toLowerCase();
-  const matched = new Set<string>();
-  for (const [family, terms] of Object.entries(COLOR_FAMILIES)) {
-    for (const term of terms) {
-      if (lower.includes(term)) {
-        matched.add(family);
-        break;
-      }
-    }
+/**
+ * Extracts inline image bytes from BOTH `data:image/...;base64,...` data URIs AND `http(s)://` URLs.
+ */
+async function resolveProductImageInlinePart(
+  imageUrl: string
+): Promise<{ inlineData: { mimeType: string; data: string } } | null> {
+  if (!imageUrl) return null;
+
+  // 1. Handle data:image/*;base64,... URIs stored directly in Supabase product_images
+  if (imageUrl.startsWith('data:image/')) {
+    const match = imageUrl.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
+    if (!match) return null;
+    const rawMime = match[1].toLowerCase();
+    const normMime = rawMime === 'image/jpg' ? 'image/jpeg' : rawMime;
+    if (!ALLOWED_MIME_TYPES.has(normMime)) return null;
+    const data = match[2].trim();
+    if (data.length < 128) return null;
+    return {
+      inlineData: {
+        mimeType: normMime,
+        data,
+      },
+    };
   }
-  return Array.from(matched);
+
+  // 2. Handle HTTP(S) Supabase Storage or external product image URLs
+  if (!imageUrl.startsWith('http')) return null;
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 3500);
+  try {
+    const resp = await fetch(imageUrl, { signal: controller.signal });
+    if (!resp.ok) return null;
+    const contentType = (resp.headers.get('content-type') || 'image/jpeg').split(';')[0].trim().toLowerCase();
+    const normMime = contentType === 'image/jpg' ? 'image/jpeg' : contentType;
+    if (!ALLOWED_MIME_TYPES.has(normMime)) return null;
+    const arrayBuf = await resp.arrayBuffer();
+    if (arrayBuf.byteLength < 256 || arrayBuf.byteLength > 4 * 1024 * 1024) return null;
+    return {
+      inlineData: {
+        mimeType: normMime,
+        data: Buffer.from(arrayBuf).toString('base64'),
+      },
+    };
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 function sanitizePublicProduct(raw: any, categoriesList: Category[], supabaseOrigin: string): EnrichedCatalogItem {
@@ -442,7 +685,14 @@ function sanitizePublicProduct(raw: any, categoriesList: Category[], supabaseOri
 
   const rawImages: ProductImage[] = Array.isArray(raw.images) ? raw.images : [];
   const validImages = rawImages
-    .filter((img) => Boolean(img?.url) && !String(img.url).startsWith('blob:'))
+    .filter((img) => {
+      if (!img?.url) return false;
+      const u = String(img.url).trim();
+      if (!u || u.startsWith('blob:')) return false;
+      // Ignore bare directory paths without a filename
+      if (u.endsWith('/product-images/products/') || u.endsWith('/products')) return false;
+      return true;
+    })
     .map((img, idx) => {
       let url = String(img.url).trim();
       if (url.startsWith('/storage/v1/object/public/') && supabaseOrigin) {
@@ -463,23 +713,23 @@ function sanitizePublicProduct(raw: any, categoriesList: Category[], supabaseOri
       return (a.display_order ?? 0) - (b.display_order ?? 0);
     });
 
+  const hasRealCatalogImage = validImages.length > 0;
   const fallbackUrl =
     resolvedCat?.image_url ||
     'https://images.pexels.com/photos/1656684/pexels-photo-1656684.jpeg?auto=compress&cs=tinysrgb&w=800';
 
-  const finalImages: ProductImage[] =
-    validImages.length > 0
-      ? validImages
-      : [
-          {
-            id: crypto.randomUUID(),
-            product_id: raw.id,
-            url: fallbackUrl,
-            is_main: true,
-            alt_text: raw.name,
-            display_order: 0,
-          },
-        ];
+  const finalImages: ProductImage[] = hasRealCatalogImage
+    ? validImages
+    : [
+        {
+          id: crypto.randomUUID(),
+          product_id: raw.id,
+          url: fallbackUrl,
+          is_main: true,
+          alt_text: raw.name,
+          display_order: 0,
+        },
+      ];
 
   const rawVariants: ProductVariant[] = Array.isArray(raw.variants) ? raw.variants : [];
   const activeVariants = rawVariants
@@ -525,7 +775,6 @@ function sanitizePublicProduct(raw: any, categoriesList: Category[], supabaseOri
     hex,
   }));
 
-  // Strictly omit cost_price and any private fields
   const cleanProduct: Product = {
     id: raw.id,
     name: raw.name,
@@ -566,6 +815,13 @@ function sanitizePublicProduct(raw: any, categoriesList: Category[], supabaseOri
     .filter(Boolean)
     .join(' ');
 
+  const mainImageUrl = finalImages[0]?.url || '';
+  const imageSignature = crypto
+    .createHash('sha1')
+    .update(hasRealCatalogImage ? mainImageUrl : `no-image:${raw.updated_at || ''}`)
+    .digest('hex')
+    .slice(0, 14);
+
   return {
     product: cleanProduct,
     effectivePrice,
@@ -573,10 +829,12 @@ function sanitizePublicProduct(raw: any, categoriesList: Category[], supabaseOri
     totalStock,
     availableSizes,
     availableColors,
-    broadRole: inferBroadRole(cleanProduct),
+    broadRole: inferBroadRoleFromMetadata(cleanProduct),
     searchableText,
-    colorFamilies: detectColorFamilies(`${cleanProduct.name} ${cleanProduct.short_desc || ''} ${colorNamesText}`),
-    mainImageUrl: finalImages[0]?.url || fallbackUrl,
+    colorFamilies: resolvePrimaryColorFamilies(`${cleanProduct.name} ${cleanProduct.short_desc || ''} ${colorNamesText}`),
+    mainImageUrl,
+    hasRealCatalogImage,
+    imageSignature,
   };
 }
 
@@ -612,7 +870,7 @@ async function fetchPublishedCatalog(): Promise<{
     return {
       ok: false,
       items: [],
-      error: `Unable to read published catalog from Supabase (${prodRes.error.message}). Verify your Supabase project URL, publishable key, and public read policy on products.`,
+      error: `Unable to read published catalog from Supabase (${prodRes.error.message}).`,
     };
   }
 
@@ -626,7 +884,232 @@ async function fetchPublishedCatalog(): Promise<{
 }
 
 // ============================================================================
-// MULTIMODAL EMBEDDINGS & SIMILARITY SCORING (gemini-embedding-2-preview)
+// AI VISION GARMENT ANALYSIS (SHARED SCHEMA FOR UPLOADED & CATALOG IMAGES)
+// ============================================================================
+const VISION_GARMENT_SCHEMA = {
+  type: Type.OBJECT,
+  properties: {
+    isClothingDetected: {
+      type: Type.BOOLEAN,
+      description: 'True if clothing, footwear, or fashion accessories are visible.',
+    },
+    summary: {
+      type: Type.STRING,
+      description: 'Concise 1-sentence description of the garment, its actual colors, and its pattern.',
+    },
+    garmentType: {
+      type: Type.STRING,
+      description:
+        'Specific garment type e.g. button-down shirt, T-shirt, polo shirt, hoodie, jeans, trousers, skirt, maxi dress, mini dress, kurta, jacket, sneakers, wedge sandals, loafers, handbag.',
+    },
+    broadRole: {
+      type: Type.STRING,
+      description: 'Strictly one of: top, bottom, one_piece, outerwear, footwear, accessory, other.',
+    },
+    genderFit: {
+      type: Type.STRING,
+      description: 'Men, Women, or Unisex.',
+    },
+    primaryColor: {
+      type: Type.STRING,
+      description:
+        'The primary dominant color of the GARMENT ITSELF (ignore studio wall, floor, hanger, skin, or street background). E.g. navy blue, beige, black, white, red, olive green.',
+    },
+    secondaryColors: {
+      type: Type.ARRAY,
+      items: { type: Type.STRING },
+      description:
+        'Actual secondary or pattern colors ON THE GARMENT ITSELF (e.g. ["white"] for white stripes on a navy shirt, ["black"] for red-and-black checks, [] if solid plain single-color). Never include background colors.',
+    },
+    colorDistributionAndContrast: {
+      type: Type.STRING,
+      description: 'Color balance and contrast e.g. solid monochrome low contrast, 85% navy base with high-contrast thin white stripes, 50/50 red-and-black check.',
+    },
+    pattern: {
+      type: Type.STRING,
+      description:
+        'Strictly one of: plain/solid, stripes, checks, plaid, floral, polka dots, abstract print, graphic print, geometric, animal print, embroidered, textured.',
+    },
+    patternScaleAndDetail: {
+      type: Type.STRING,
+      description:
+        'Pattern scale, direction, or surface detail e.g. plain smooth weave, thin vertical pinstripes, medium buffalo checks, small ditsy floral print, floral lace overlay, bold chest graphic.',
+    },
+    collarAndNeckline: {
+      type: Type.STRING,
+      description: 'Collar/neckline e.g. spread collar, button-down collar, crew neck, V-neck, wrap neckline, round neck, or shoe closure.',
+    },
+    sleeves: {
+      type: Type.STRING,
+      description: 'Sleeve type e.g. long sleeves with buttoned cuffs, oversized half sleeves, ruffle short sleeves, sleeveless, or shoe cut.',
+    },
+    silhouetteAndFit: {
+      type: Type.STRING,
+      description: 'Fit and cut e.g. slim fit, oversized boxy fit, relaxed regular fit, A-line maxi, high-waist straight leg, low-top sneaker, platform wedge.',
+    },
+    fabricAppearance: {
+      type: Type.STRING,
+      description: 'Visible fabric/material appearance e.g. crisp cotton poplin, heavyweight cotton jersey, denim twill, chiffon/crepe, woven jute & floral lace, smooth faux leather.',
+    },
+    styleCategory: {
+      type: Type.STRING,
+      description: 'Overall style e.g. Minimalist, Smart Casual, Streetwear, Formal, Ethnic Fusion, Resort/Summer, Athleisure.',
+    },
+    designDetails: {
+      type: Type.ARRAY,
+      items: { type: Type.STRING },
+      description: 'Specific visible details: buttons, pockets, logos, graphics, waist tie, pleats, ruffles, lace-up closure, ankle strap.',
+    },
+    outfitPairingIdeas: {
+      type: Type.ARRAY,
+      items: { type: Type.STRING },
+      description: '2-3 complementary items that pair well with this piece.',
+    },
+  },
+  required: [
+    'isClothingDetected',
+    'summary',
+    'garmentType',
+    'broadRole',
+    'genderFit',
+    'primaryColor',
+    'secondaryColors',
+    'colorDistributionAndContrast',
+    'pattern',
+    'patternScaleAndDetail',
+    'collarAndNeckline',
+    'sleeves',
+    'silhouetteAndFit',
+    'fabricAppearance',
+    'styleCategory',
+    'designDetails',
+    'outfitPairingIdeas',
+  ],
+};
+
+function normalizeVisionAnalysisObject(parsed: any): VisualGarmentAnalysis {
+  const allowedRoles = new Set(['top', 'bottom', 'one_piece', 'outerwear', 'footwear', 'accessory', 'other']);
+  const rawRole = String(parsed.broadRole || '').toLowerCase().trim();
+  const garmentType = String(parsed.garmentType || 'Apparel').trim();
+  const garmentSubcategory = normalizeGarmentSubcategory(
+    garmentType,
+    rawRole,
+    `${parsed.summary || ''} ${parsed.silhouetteAndFit || ''}`
+  );
+
+  let broadRole: VisualGarmentAnalysis['broadRole'] = allowedRoles.has(rawRole)
+    ? (rawRole as VisualGarmentAnalysis['broadRole'])
+    : 'other';
+
+  // Ensure broadRole is 100% consistent with specific garmentSubcategory
+  if (garmentSubcategory === 'dress_onepiece') broadRole = 'one_piece';
+  else if (
+    garmentSubcategory === 'sneakers_shoes' ||
+    garmentSubcategory === 'sandals_heels' ||
+    garmentSubcategory === 'boots_loafers'
+  ) {
+    broadRole = 'footwear';
+  } else if (garmentSubcategory === 'bag_accessory') broadRole = 'accessory';
+  else if (garmentSubcategory === 'outerwear') broadRole = 'outerwear';
+  else if (
+    garmentSubcategory === 'jeans_denim' ||
+    garmentSubcategory === 'trousers_chinos' ||
+    garmentSubcategory === 'skirt' ||
+    garmentSubcategory === 'shorts'
+  ) {
+    broadRole = 'bottom';
+  } else if (
+    garmentSubcategory === 'button_shirt' ||
+    garmentSubcategory === 'tshirt_top' ||
+    garmentSubcategory === 'knit_hoodie' ||
+    garmentSubcategory === 'ethnic_top'
+  ) {
+    broadRole = 'top';
+  }
+
+  const primaryColor = String(parsed.primaryColor || '').trim() || 'Neutral';
+  const secondaryColors = Array.isArray(parsed.secondaryColors)
+    ? parsed.secondaryColors
+        .map((c: any) => String(c || '').trim())
+        .filter((c: string) => Boolean(c) && c.toLowerCase() !== 'none' && c.toLowerCase() !== 'null')
+        .slice(0, 3)
+    : [];
+
+  const dominantColors = Array.from(
+    new Set([primaryColor, ...secondaryColors].filter(Boolean))
+  );
+
+  const pattern = String(parsed.pattern || 'plain/solid').trim().toLowerCase();
+  const patternScaleAndDetail = String(parsed.patternScaleAndDetail || pattern).trim();
+  const collarAndNeckline = String(parsed.collarAndNeckline || '').trim();
+  const sleeves = String(parsed.sleeves || '').trim();
+
+  return {
+    isClothingDetected: Boolean(parsed.isClothingDetected),
+    summary: String(parsed.summary || `${primaryColor} ${garmentType}`).trim(),
+    garmentType,
+    garmentSubcategory,
+    broadRole,
+    genderFit: String(parsed.genderFit || 'Unisex').trim(),
+    primaryColor,
+    secondaryColors,
+    dominantColors,
+    colorCombination:
+      secondaryColors.length > 0
+        ? `${primaryColor} with ${secondaryColors.join(', ')}`
+        : `Solid ${primaryColor}`,
+    colorDistributionAndContrast: String(parsed.colorDistributionAndContrast || '').trim(),
+    pattern,
+    patternScaleAndDetail,
+    patternOrPrint:
+      pattern === 'plain/solid'
+        ? 'Plain / Solid'
+        : `${capitalizeWords(pattern)}${patternScaleAndDetail && patternScaleAndDetail.toLowerCase() !== pattern ? ` (${patternScaleAndDetail})` : ''}`,
+    fabricAppearance: String(parsed.fabricAppearance || 'Woven / Knit').trim(),
+    silhouetteAndFit: String(parsed.silhouetteAndFit || 'Regular fit').trim(),
+    collarAndNeckline,
+    sleeves,
+    sleeveAndNeckline: [collarAndNeckline, sleeves].filter(Boolean).join(' · ') || 'Standard cut',
+    styleCategory: String(parsed.styleCategory || 'Contemporary').trim(),
+    designDetails: Array.isArray(parsed.designDetails)
+      ? parsed.designDetails.map(String).filter(Boolean).slice(0, 7)
+      : [],
+    outfitPairingIdeas: Array.isArray(parsed.outfitPairingIdeas)
+      ? parsed.outfitPairingIdeas.map(String).filter(Boolean).slice(0, 4)
+      : [],
+  };
+}
+
+async function analyzeGarmentImageWithVision(
+  ai: GoogleGenAI,
+  mimeType: string,
+  base64Data: string,
+  contextHint = ''
+): Promise<VisualGarmentAnalysis | null> {
+  const parsed = await generateStructuredJsonWithFailover(
+    ai,
+    {
+      parts: [
+        { inlineData: { mimeType, data: base64Data } },
+        {
+          text:
+            `Carefully inspect ONLY the primary fashion garment/footwear/accessory worn or displayed in this image.` +
+            (contextHint ? ` Context: ${contextHint}.` : '') +
+            ` Identify the exact garment type, actual garment primary and secondary colors (strictly ignoring walls, floors, studio backdrops, skin, or secondary outfit pieces unless part of a one-piece), exact pattern (plain/solid, stripes, checks, plaid, floral, polka dots, abstract print, graphic print, geometric, animal print, embroidered, or textured), pattern scale/direction, collar, sleeves, silhouette/fit, design details, and fabric appearance.`,
+        },
+      ],
+    },
+    'You are a precision computer-vision fashion attribute extractor for Form & Fit. Report ONLY what is visually present on the main garment itself. Never confuse background colors with garment colors. Distinguish plain/solid vs stripes vs checks/plaid vs floral vs graphic print accurately. If no clothing, footwear, or fashion accessory is visible at all, set isClothingDetected to false.',
+    VISION_GARMENT_SCHEMA,
+    0.1
+  );
+
+  if (!parsed) return null;
+  return normalizeVisionAnalysisObject(parsed);
+}
+
+// ============================================================================
+// EMBEDDINGS & CATALOG VISUAL INDEXING
 // ============================================================================
 function cosineSimilarity(a: number[], b: number[]): number {
   if (!a.length || !b.length || a.length !== b.length) return 0;
@@ -642,249 +1125,442 @@ function cosineSimilarity(a: number[], b: number[]): number {
   return denom > 0 ? dot / denom : 0;
 }
 
-async function getOrCreateEmbedding(
+async function embedSingleImageBytes(
   ai: GoogleGenAI,
-  cache: Map<string, number[]>,
-  key: string,
-  contentPart: string | { inlineData: { data: string; mimeType: string } }
+  mimeType: string,
+  base64Data: string
 ): Promise<number[] | null> {
-  const cached = cache.get(key);
-  if (cached) return cached;
   try {
     const res = await ai.models.embedContent({
       model: 'gemini-embedding-2-preview',
-      contents: [contentPart],
+      contents: [{ inlineData: { mimeType, data: base64Data } }],
     });
     const vec = res.embeddings?.[0]?.values;
-    if (vec && vec.length > 0) {
-      cache.set(key, vec);
-      return vec;
-    }
+    return vec && vec.length > 0 ? vec : null;
   } catch {
-    // Ignore transient embedding error
+    return null;
   }
-  return null;
 }
 
-async function computeSemanticSimilarities(
+/**
+ * Ensures every published catalog item with a usable image has:
+ * 1) A cached AI Vision profile extracted from its actual product photo (so generic titles or default variant colors never mislead matching).
+ * 2) A cached pure image embedding vector from gemini-embedding-2-preview for true image-to-image visual comparison.
+ */
+async function enrichCatalogWithVisualIntelligence(
   ai: GoogleGenAI,
-  queryParts: Array<string | { inlineData: { data: string; mimeType: string } }>,
   catalog: EnrichedCatalogItem[]
-): Promise<{ scores: Map<string, number>; queryVector: number[] | null }> {
-  const scores = new Map<string, number>();
-  if (catalog.length === 0) return { scores, queryVector: null };
+): Promise<void> {
+  loadDiskVisualCacheOnce();
+  const imagedItems = catalog.filter((item) => item.hasRealCatalogImage);
 
-  try {
-    const queryEmbedRes = await ai.models.embedContent({
-      model: 'gemini-embedding-2-preview',
-      contents: queryParts,
-    });
-    const queryVector = queryEmbedRes.embeddings?.[0]?.values || null;
-    if (!queryVector || queryVector.length === 0) return { scores, queryVector: null };
+  // Process uncached catalog images in gentle pairs (concurrency=2) so cold start never spikes Gemini RPM
+  const uncached = imagedItems
+    .filter((item) => {
+      const key = `${item.product.id}:${item.imageSignature}`;
+      return !catalogVisualProfileCache.has(key) || !catalogPureImageEmbeddingCache.has(key);
+    })
+    .slice(0, 12);
 
-    const uncachedItems = catalog
-      .filter((item) => !productEmbeddingCache.has(`${item.product.id}:${item.product.updated_at}`))
-      .slice(0, 24);
-
-    if (uncachedItems.length > 0) {
+  if (uncached.length > 0) {
+    let cacheMutated = false;
+    for (let i = 0; i < uncached.length; i += 2) {
+      const batch = uncached.slice(i, i + 2);
       await Promise.all(
-        uncachedItems.map(async (item) => {
-          const cacheKey = `${item.product.id}:${item.product.updated_at}`;
-          const prodSummary = `${item.product.name}. Category: ${item.product.category?.name || item.product.gender_collection}. Gender: ${item.product.gender_collection}. Colors: ${item.availableColors.map((c) => c.name).join(', ')}. Fit: ${item.product.fit || 'Standard'}. Fabric: ${item.product.fabric_material || 'Apparel'}. Details: ${item.product.short_desc || ''} ${item.product.description || ''}`.slice(
-            0,
-            1200
-          );
-          try {
-            const imgPart = await fetchProductImageInlinePart(item.mainImageUrl);
-            const parts: Array<string | { inlineData: { data: string; mimeType: string } }> = imgPart
-              ? [prodSummary, imgPart]
-              : [prodSummary];
-            const emb = await ai.models.embedContent({
-              model: 'gemini-embedding-2-preview',
-              contents: parts,
-            });
-            const vec = emb.embeddings?.[0]?.values;
-            if (vec && vec.length > 0) {
-              productEmbeddingCache.set(cacheKey, vec);
+        batch.map(async (item) => {
+          const key = `${item.product.id}:${item.imageSignature}`;
+          const imgPart = await resolveProductImageInlinePart(item.mainImageUrl);
+          if (!imgPart) return;
+
+          if (!catalogVisualProfileCache.has(key)) {
+            const profile = await analyzeGarmentImageWithVision(
+              ai,
+              imgPart.inlineData.mimeType,
+              imgPart.inlineData.data,
+              `Catalog title: "${item.product.name}", category: "${item.product.category?.name || item.product.gender_collection}", note: "${item.product.short_desc || ''}"`
+            );
+            if (profile) {
+              catalogVisualProfileCache.set(key, profile);
+              cacheMutated = true;
             }
-          } catch {
-            await getOrCreateEmbedding(ai, productEmbeddingCache, cacheKey, prodSummary);
+          }
+
+          if (!catalogPureImageEmbeddingCache.has(key)) {
+            const vec = await embedSingleImageBytes(
+              ai,
+              imgPart.inlineData.mimeType,
+              imgPart.inlineData.data
+            );
+            if (vec) {
+              catalogPureImageEmbeddingCache.set(key, vec);
+              cacheMutated = true;
+            }
           }
         })
       );
     }
+    if (cacheMutated) {
+      saveDiskVisualCache();
+    }
+  }
 
-    for (const item of catalog) {
-      const vec = productEmbeddingCache.get(`${item.product.id}:${item.product.updated_at}`);
-      if (vec) {
-        const sim = Math.max(0, cosineSimilarity(queryVector, vec));
-        scores.set(item.product.id, sim);
+  for (const item of catalog) {
+    const key = `${item.product.id}:${item.imageSignature}`;
+    const cachedProfile = catalogVisualProfileCache.get(key);
+    if (cachedProfile) {
+      item.visualProfile = cachedProfile;
+      // Trust visual garment role if metadata was generic
+      if (cachedProfile.broadRole !== 'other') {
+        item.broadRole = cachedProfile.broadRole;
+      }
+      const visualColorFams = resolvePrimaryColorFamilies(
+        `${cachedProfile.primaryColor} ${cachedProfile.secondaryColors.join(' ')}`
+      );
+      if (visualColorFams.length > 0) {
+        item.colorFamilies = visualColorFams;
       }
     }
-    return { scores, queryVector };
-  } catch {
-    return { scores, queryVector: null };
   }
 }
 
-// Multimodal embedding classifier fallback when generative Flash endpoints experience 503 traffic spikes
-const GARMENT_PROTOTYPES: Array<{
-  label: string;
-  broadRole: VisualGarmentAnalysis['broadRole'];
-  prompt: string;
-  fit: string;
-  sleeve: string;
-}> = [
-  {
-    label: 'T-Shirt',
-    broadRole: 'top',
-    prompt: 'A photo of a person or mannequin wearing a crew-neck short-sleeve cotton t-shirt tee top',
-    fit: 'Relaxed Everyday Fit',
-    sleeve: 'Short sleeve crew neck',
-  },
-  {
-    label: 'Button-Down Shirt',
-    broadRole: 'top',
-    prompt: 'A photo of a person or mannequin wearing a collared button-down shirt',
-    fit: 'Relaxed Tailored Cut',
-    sleeve: 'Collared button placket',
-  },
-  {
-    label: 'Hoodie / Sweatshirt',
-    broadRole: 'top',
-    prompt: 'A photo of a person wearing a long-sleeve pullover hoodie or fleece sweatshirt',
-    fit: 'Oversized Drop-Shoulder',
-    sleeve: 'Long sleeve ribbed cuffs',
-  },
-  {
-    label: 'Trousers / Jeans',
-    broadRole: 'bottom',
-    prompt: 'A lower-body photo of trousers, tailored pants, cargo pants, or denim jeans',
-    fit: 'Structured Straight-Leg',
-    sleeve: 'Waistband & tailored leg',
-  },
-  {
-    label: 'Dress / Kurta Set',
-    broadRole: 'one_piece',
-    prompt: 'A full-length photo of a woman wearing a dress, gown, jumpsuit, or ethnic kurta',
-    fit: 'Fluid Draped Silhouette',
-    sleeve: 'Clean tailored neckline',
-  },
-  {
-    label: 'Jacket / Outerwear',
-    broadRole: 'outerwear',
-    prompt: 'A photo of a person wearing a zip jacket, blazer, coat, or bomber outerwear',
-    fit: 'Structured Layering Cut',
-    sleeve: 'Full sleeve outerwear',
-  },
-  {
-    label: 'Footwear / Sneakers',
-    broadRole: 'footwear',
-    prompt: 'A close-up product photo of a pair of sneakers, loafers, boots, heels, or sandals',
-    fit: 'Low-Profile Silhouette',
-    sleeve: 'Sculpted sole & upper',
-  },
-  {
-    label: 'Handbag / Accessory',
-    broadRole: 'accessory',
-    prompt: 'A close-up still-life product photo of a handbag, backpack, leather belt, wristwatch, or baseball cap without a person',
-    fit: 'Everyday Carry',
-    sleeve: 'Clean hardware finish',
-  },
-];
+// ============================================================================
+// STRICT 6-PRIORITY VISUAL MATCHING & FILTERING ENGINE
+// ============================================================================
+interface EvaluatedVisualCandidate {
+  item: EnrichedCatalogItem;
+  finalScore: number;
+  categoryCompatible: boolean;
+  exactSubtypeMatch: boolean;
+  colorStatus: 'exact' | 'adjacent' | 'conflict';
+  patternStatus: 'exact' | 'related' | 'conflict';
+  visualCosine: number;
+  matchedTraits: string[];
+  conflictTraits: string[];
+  matchTier: MatchTier;
+  explanation: string;
+}
 
-const COLOR_PROTOTYPES = [
-  { name: 'Black', prompt: 'solid black dark charcoal clothing garment' },
-  { name: 'White / Ivory', prompt: 'crisp white off-white ivory clothing garment' },
-  { name: 'Beige / Cream', prompt: 'warm beige cream sand oatmeal khaki clothing garment' },
-  { name: 'Blue / Navy', prompt: 'navy blue indigo denim sky blue clothing garment' },
-  { name: 'Olive / Green', prompt: 'olive sage forest green lime clothing garment' },
-  { name: 'Grey / Heather', prompt: 'heather grey slate silver clothing garment' },
-  { name: 'Brown / Mocha', prompt: 'chocolate brown espresso rust terracotta clothing garment' },
-  { name: 'Red / Burgundy', prompt: 'crimson red burgundy maroon clothing garment' },
-];
+function isBroadCategoryCompatible(
+  refRole: VisualGarmentAnalysis['broadRole'],
+  candRole: EnrichedCatalogItem['broadRole']
+): boolean {
+  if (refRole === 'other' || candRole === 'other') return false;
+  if (refRole === candRole) return true;
+  // Allow shacket/overshirt cross-check only between top and outerwear
+  if (
+    (refRole === 'outerwear' && candRole === 'top') ||
+    (refRole === 'top' && candRole === 'outerwear')
+  ) {
+    return false;
+  }
+  return false;
+}
 
-const STYLE_PROTOTYPES = [
-  { name: 'Minimalist', prompt: 'minimalist clean solid timeless neutral fashion aesthetic' },
-  { name: 'Streetwear', prompt: 'oversized streetwear graphic urban relaxed fashion style' },
-  { name: 'Smart Casual', prompt: 'smart casual refined tailored everyday office fashion style' },
-  { name: 'Formal', prompt: 'formal structured dressy evening tailored fashion style' },
-  { name: 'Ethnic Fusion', prompt: 'indian ethnic fusion kurta festive contemporary fashion style' },
-];
+function evaluateCandidateAgainstReference(
+  ref: VisualGarmentAnalysis,
+  item: EnrichedCatalogItem,
+  queryImageVector: number[] | null
+): EvaluatedVisualCandidate {
+  const matchedTraits: string[] = [];
+  const conflictTraits: string[] = [];
 
-async function classifyImageViaMultimodalEmbeddings(
-  ai: GoogleGenAI,
-  mimeType: string,
-  base64Data: string,
-  userMessage?: string
-): Promise<VisualGarmentAnalysis> {
-  const imgVecRes = await ai.models.embedContent({
-    model: 'gemini-embedding-2-preview',
-    contents: [{ inlineData: { data: base64Data, mimeType } }],
-  });
-  const imgVec = imgVecRes.embeddings?.[0]?.values || [];
-
-  // Warm prototype caches in parallel
-  await Promise.all([
-    ...GARMENT_PROTOTYPES.map((g) =>
-      getOrCreateEmbedding(ai, prototypeEmbeddingCache, `g:${g.label}`, g.prompt)
-    ),
-    ...COLOR_PROTOTYPES.map((c) =>
-      getOrCreateEmbedding(ai, prototypeEmbeddingCache, `c:${c.name}`, c.prompt)
-    ),
-    ...STYLE_PROTOTYPES.map((s) =>
-      getOrCreateEmbedding(ai, prototypeEmbeddingCache, `s:${s.name}`, s.prompt)
-    ),
-  ]);
-
-  let bestGarment = GARMENT_PROTOTYPES[0];
-  let bestGarmentScore = -1;
-  for (const g of GARMENT_PROTOTYPES) {
-    const vec = prototypeEmbeddingCache.get(`g:${g.label}`);
-    if (vec && imgVec.length === vec.length) {
-      const sim = cosineSimilarity(imgVec, vec);
-      if (sim > bestGarmentScore) {
-        bestGarmentScore = sim;
-        bestGarment = g;
-      }
-    }
+  // Exclude items lacking a usable product image or out of stock
+  if (!item.hasRealCatalogImage || !item.inStock) {
+    return {
+      item,
+      finalScore: 0,
+      categoryCompatible: false,
+      exactSubtypeMatch: false,
+      colorStatus: 'conflict',
+      patternStatus: 'conflict',
+      visualCosine: 0,
+      matchedTraits: [],
+      conflictTraits: [!item.hasRealCatalogImage ? 'missing product image' : 'out of stock'],
+      matchTier: 'alternative_style',
+      explanation: '',
+    };
   }
 
-  const rankedColors = COLOR_PROTOTYPES.map((c) => {
-    const vec = prototypeEmbeddingCache.get(`c:${c.name}`);
-    const sim = vec && imgVec.length === vec.length ? cosineSimilarity(imgVec, vec) : 0;
-    return { name: c.name, sim };
-  }).sort((a, b) => b.sim - a.sim);
+  const candProfile = item.visualProfile;
+  const candRole = candProfile?.broadRole && candProfile.broadRole !== 'other' ? candProfile.broadRole : item.broadRole;
 
-  const rankedStyles = STYLE_PROTOTYPES.map((s) => {
-    const vec = prototypeEmbeddingCache.get(`s:${s.name}`);
-    const sim = vec && imgVec.length === vec.length ? cosineSimilarity(imgVec, vec) : 0;
-    return { name: s.name, sim };
-  }).sort((a, b) => b.sim - a.sim);
+  // --------------------------------------------------------------------------
+  // PRIORITY 1: Garment Category & Subcategory Compatibility
+  // --------------------------------------------------------------------------
+  const categoryCompatible = isBroadCategoryCompatible(ref.broadRole, candRole);
+  const refSub =
+    (ref.garmentSubcategory as GarmentSubcategory) ||
+    normalizeGarmentSubcategory(ref.garmentType, ref.broadRole, ref.summary);
+  const candSub = candProfile
+    ? (candProfile.garmentSubcategory as GarmentSubcategory) ||
+      normalizeGarmentSubcategory(candProfile.garmentType, candRole, candProfile.summary)
+    : normalizeGarmentSubcategory(item.product.name, candRole, item.searchableText);
 
-  const topColors = rankedColors.slice(0, 2).map((c) => c.name);
-  const topStyle = rankedStyles[0]?.name || 'Minimalist';
+  const exactSubtypeMatch = categoryCompatible && refSub === candSub;
+
+  let score = 0;
+  if (!categoryCompatible) {
+    score -= 60;
+    conflictTraits.push(`different garment category (${candProfile?.garmentType || item.product.name})`);
+  } else if (exactSubtypeMatch) {
+    score += 26;
+    matchedTraits.push(`${(candProfile?.garmentType || item.product.name).toLowerCase()} silhouette`);
+  } else {
+    // Same broad role, different subtype (e.g., T-shirt vs Dress Shirt, or Sneakers vs Wedge Sandals)
+    score += 6;
+    conflictTraits.push(
+      `${candProfile?.garmentType || item.product.name} instead of ${ref.garmentType.toLowerCase()}`
+    );
+  }
+
+  // --------------------------------------------------------------------------
+  // PRIORITY 2: Primary & Secondary Color Similarity (Heavy Penalty on Conflict)
+  // --------------------------------------------------------------------------
+  const refPrimaryFams = resolvePrimaryColorFamilies(ref.primaryColor);
+  const refSecondaryFams = resolvePrimaryColorFamilies(ref.secondaryColors.join(' '));
+
+  const candPrimaryText = candProfile
+    ? candProfile.primaryColor
+    : `${item.product.name} ${item.product.short_desc || ''}`;
+  const candSecondaryText = candProfile ? candProfile.secondaryColors.join(' ') : '';
+  const candPrimaryFams = resolvePrimaryColorFamilies(candPrimaryText);
+  const candSecondaryFams = resolvePrimaryColorFamilies(candSecondaryText);
+  const allCandColorFams = Array.from(new Set([...candPrimaryFams, ...candSecondaryFams]));
+
+  let colorStatus: 'exact' | 'adjacent' | 'conflict' = 'conflict';
+
+  const exactPrimaryOverlap = refPrimaryFams.some((f) => candPrimaryFams.includes(f));
+  const rawNameMatch =
+    candProfile &&
+    ref.primaryColor.toLowerCase().trim() === candProfile.primaryColor.toLowerCase().trim();
+
+  const adjacentPrimaryOverlap = refPrimaryFams.some((rf) =>
+    (ADJACENT_COLOR_FAMILIES[rf] || []).some((adj) => candPrimaryFams.includes(adj))
+  );
+  const swappedPrimarySecondary =
+    refPrimaryFams.some((f) => candSecondaryFams.includes(f)) ||
+    refSecondaryFams.some((f) => candPrimaryFams.includes(f));
+
+  if (exactPrimaryOverlap || rawNameMatch) {
+    colorStatus = 'exact';
+    score += 26;
+    matchedTraits.push(`${candProfile?.primaryColor || ref.primaryColor} color`);
+
+    // Check secondary color alignment when reference has prominent accent/pattern colors
+    if (refSecondaryFams.length > 0) {
+      const secHit = refSecondaryFams.some((sf) => allCandColorFams.includes(sf));
+      if (secHit) {
+        score += 8;
+        matchedTraits.push(`${ref.secondaryColors[0]} accent`);
+      } else {
+        score -= 6;
+      }
+    }
+  } else if (adjacentPrimaryOverlap || swappedPrimarySecondary) {
+    colorStatus = 'adjacent';
+    score += 12;
+    matchedTraits.push(`related ${candProfile?.primaryColor || 'tonal'} shade`);
+  } else {
+    colorStatus = 'conflict';
+    score -= 26;
+    conflictTraits.push(
+      `${candProfile?.primaryColor || 'different'} color instead of ${ref.primaryColor}`
+    );
+  }
+
+  // --------------------------------------------------------------------------
+  // PRIORITY 3: Pattern Similarity (Heavy Penalty on Conflict)
+  // --------------------------------------------------------------------------
+  const refPatGroup = normalizePatternGroup(ref.pattern, ref.patternScaleAndDetail);
+  const candPatGroup = candProfile
+    ? normalizePatternGroup(candProfile.pattern, candProfile.patternScaleAndDetail)
+    : normalizePatternGroup(item.searchableText);
+
+  let patternStatus: 'exact' | 'related' | 'conflict' = 'conflict';
+
+  if (refPatGroup === candPatGroup) {
+    patternStatus = 'exact';
+    score += 22;
+    matchedTraits.push(
+      refPatGroup === 'solid'
+        ? 'plain solid finish'
+        : `${ref.patternScaleAndDetail || ref.pattern} pattern`
+    );
+
+    // Extra precision for stripe/check scale & orientation (e.g. vertical vs horizontal)
+    const refDetailLower = (ref.patternScaleAndDetail || '').toLowerCase();
+    const candDetailLower = (candProfile?.patternScaleAndDetail || '').toLowerCase();
+    if (refPatGroup === 'stripes') {
+      if (
+        (refDetailLower.includes('vertical') && candDetailLower.includes('horizontal')) ||
+        (refDetailLower.includes('horizontal') && candDetailLower.includes('vertical'))
+      ) {
+        score -= 8;
+      } else if (
+        (refDetailLower.includes('vertical') && candDetailLower.includes('vertical')) ||
+        (refDetailLower.includes('thin') && candDetailLower.includes('thin'))
+      ) {
+        score += 4;
+      }
+    }
+  } else if (
+    (refPatGroup === 'solid' && candPatGroup === 'embroidered_textured') ||
+    (refPatGroup === 'embroidered_textured' && candPatGroup === 'solid') ||
+    (refPatGroup === 'graphic_print' && candPatGroup === 'abstract_geometric') ||
+    (refPatGroup === 'abstract_geometric' && candPatGroup === 'graphic_print') ||
+    (refPatGroup === 'floral' && candPatGroup === 'embroidered_textured' &&
+      (candProfile?.patternScaleAndDetail || '').toLowerCase().includes('floral'))
+  ) {
+    patternStatus = 'related';
+    score += 10;
+  } else {
+    patternStatus = 'conflict';
+    score -= 22;
+    conflictTraits.push(
+      `${candProfile?.pattern || candPatGroup.replace('_', ' ')} instead of ${ref.pattern}`
+    );
+  }
+
+  // --------------------------------------------------------------------------
+  // PRIORITY 4: Design Details & Silhouette (-8 to +12 pts)
+  // --------------------------------------------------------------------------
+  const refDetailTokens = new Set(
+    tokenizeWords(
+      `${ref.collarAndNeckline || ''} ${ref.sleeves || ''} ${ref.silhouetteAndFit} ${(ref.designDetails || []).join(' ')}`
+    )
+  );
+  const candDetailText = candProfile
+    ? `${candProfile.collarAndNeckline || ''} ${candProfile.sleeves || ''} ${candProfile.silhouetteAndFit} ${(candProfile.designDetails || []).join(' ')}`
+    : `${item.product.fit || ''} ${item.searchableText}`;
+  const candDetailTokens = tokenizeWords(candDetailText);
+
+  let detailOverlap = 0;
+  const matchedDetailWords: string[] = [];
+  for (const tok of candDetailTokens) {
+    if (refDetailTokens.has(tok)) {
+      detailOverlap++;
+      if (matchedDetailWords.length < 2) matchedDetailWords.push(tok);
+    }
+  }
+  score += Math.min(12, detailOverlap * 3);
+  if (matchedDetailWords.length > 0) {
+    matchedTraits.push(`${matchedDetailWords.join(' ')} detail`);
+  }
+
+  // Fit conflict check (e.g. oversized streetwear tee vs slim formal fit)
+  const refFitLower = ref.silhouetteAndFit.toLowerCase();
+  const candFitLower = (candProfile?.silhouetteAndFit || item.product.fit || '').toLowerCase();
+  if (
+    (refFitLower.includes('oversized') && candFitLower.includes('slim')) ||
+    (refFitLower.includes('slim') && candFitLower.includes('oversized'))
+  ) {
+    score -= 8;
+  }
+
+  // --------------------------------------------------------------------------
+  // PRIORITY 5: Pure Visual Image Similarity via Embeddings (0 to +14 pts)
+  // --------------------------------------------------------------------------
+  const candImgVec = catalogPureImageEmbeddingCache.get(`${item.product.id}:${item.imageSignature}`);
+  let visualCosine = 0;
+  if (queryImageVector && candImgVec && queryImageVector.length === candImgVec.length) {
+    visualCosine = cosineSimilarity(queryImageVector, candImgVec);
+    // Typical image-to-image cosine range on Gemini Embedding 2 is ~0.50 (unrelated) to ~0.95 (identical)
+    const normalizedVisual = Math.max(0, Math.min(1, (visualCosine - 0.56) / 0.36));
+    score += Math.round(normalizedVisual * 14);
+  }
+
+  // --------------------------------------------------------------------------
+  // PRIORITY 6: Fabric Appearance & Style Compatibility (0 to +6 pts)
+  // --------------------------------------------------------------------------
+  const refFabTokens = tokenizeWords(`${ref.fabricAppearance} ${ref.styleCategory}`);
+  const candFabText = `${candProfile?.fabricAppearance || item.product.fabric_material || ''} ${candProfile?.styleCategory || ''}`.toLowerCase();
+  let fabHits = 0;
+  for (const t of refFabTokens) {
+    if (candFabText.includes(t)) fabHits++;
+  }
+  score += Math.min(6, fabHits * 3);
+
+  // --------------------------------------------------------------------------
+  // HARD CEILINGS FOR ACCURACY (Never promote wrong category, color, or pattern!)
+  // --------------------------------------------------------------------------
+  if (!categoryCompatible) {
+    score = Math.min(score, 10);
+  } else if (!exactSubtypeMatch) {
+    score = Math.min(score, 48);
+  } else if (colorStatus === 'conflict' || patternStatus === 'conflict') {
+    // Same garment type, but wrong primary color OR wrong pattern (e.g. black floral dress vs white blue dress, or striped navy shirt vs plain navy shirt)
+    score = Math.min(score, 52);
+  }
+
+  const finalScore = Math.max(0, Math.min(99, Math.round(score)));
+  const { exact: exactThreshold, strong: strongThreshold } = getMatchThresholds();
+
+  let matchTier: MatchTier = 'alternative_style';
+  if (
+    finalScore >= exactThreshold &&
+    exactSubtypeMatch &&
+    colorStatus === 'exact' &&
+    patternStatus === 'exact'
+  ) {
+    matchTier = 'exact_match';
+  } else if (finalScore >= strongThreshold && categoryCompatible) {
+    matchTier = 'very_similar';
+  }
+
+  const explanation = buildCandidateExplanation(
+    ref,
+    candProfile,
+    item,
+    matchTier,
+    matchedTraits,
+    conflictTraits
+  );
 
   return {
-    isClothingDetected: true,
-    summary: `${topStyle} ${topColors[0] || ''} ${bestGarment.label.toLowerCase()}${userMessage ? ` (${userMessage})` : ''}`.trim(),
-    garmentType: bestGarment.label,
-    broadRole: bestGarment.broadRole,
-    genderFit: 'Unisex',
-    dominantColors: topColors,
-    colorCombination: topColors.join(' & '),
-    patternOrPrint: 'Clean contemporary finish',
-    fabricAppearance: 'Woven / Cotton knit',
-    silhouetteAndFit: bestGarment.fit,
-    sleeveAndNeckline: bestGarment.sleeve,
-    styleCategory: topStyle,
-    designDetails: ['Clean seam construction', 'Versatile everyday silhouette'],
-    outfitPairingIdeas: ['Relaxed trousers or denim', 'Minimalist sneakers', 'Structured tote or cap'],
+    item,
+    finalScore,
+    categoryCompatible,
+    exactSubtypeMatch,
+    colorStatus,
+    patternStatus,
+    visualCosine,
+    matchedTraits,
+    conflictTraits,
+    matchTier,
+    explanation,
   };
 }
 
-function tokenizeKeywords(text: string): string[] {
-  return text
+function buildCandidateExplanation(
+  ref: VisualGarmentAnalysis,
+  candProfile: VisualGarmentAnalysis | undefined,
+  item: EnrichedCatalogItem,
+  tier: MatchTier,
+  matchedTraits: string[],
+  conflictTraits: string[]
+): string {
+  const uniqueMatches = Array.from(new Set(matchedTraits)).slice(0, 3);
+  if (tier === 'exact_match') {
+    return `Matches the ${uniqueMatches.join(', ')} seen in your reference photo.`;
+  }
+  if (tier === 'very_similar') {
+    if (conflictTraits.length > 0) {
+      return `Matches the ${uniqueMatches.slice(0, 2).join(' and ')}; features ${conflictTraits[0]}.`;
+    }
+    return `Closely matches the ${uniqueMatches.join(', ')}.`;
+  }
+  // Alternative style (e.g., same category different color, or similar pattern)
+  const candColor = candProfile?.primaryColor || item.availableColors[0]?.name || 'neutral';
+  const candPattern = candProfile?.pattern || 'classic';
+  const candType = candProfile?.garmentType || item.product.name;
+  if (uniqueMatches.length > 0 && conflictTraits.length > 0) {
+    return `Shares the ${uniqueMatches[0]}, offered in ${candColor} (${candPattern}).`;
+  }
+  return `Available Form & Fit ${candType.toLowerCase()} in ${candColor} (${candPattern}).`;
+}
+
+function tokenizeWords(text: string): string[] {
+  return (text || '')
     .toLowerCase()
     .replace(/[^a-z0-9\s-]/g, ' ')
     .split(/\s+/)
@@ -892,231 +1568,161 @@ function tokenizeKeywords(text: string): string[] {
     .filter(
       (w) =>
         w.length >= 3 &&
-        !['the', 'and', 'for', 'with', 'this', 'that', 'from', 'look', 'find', 'want', 'show'].includes(w)
+        ![
+          'the',
+          'and',
+          'for',
+          'with',
+          'this',
+          'that',
+          'from',
+          'fit',
+          'style',
+          'cut',
+          'plain',
+          'solid',
+          'standard',
+        ].includes(w)
     );
 }
 
-function scoreCatalogItemForVisualAnalysis(
-  item: EnrichedCatalogItem,
-  analysis: VisualGarmentAnalysis,
-  prefs: StylistPreferences,
-  embeddingScore: number
-): { score: number; preliminaryTier: MatchTier; reasonHints: string[] } {
-  let score = 0;
-  const hints: string[] = [];
-  const lowerSearchable = item.searchableText.toLowerCase();
-
-  const roleMatches =
-    analysis.broadRole !== 'other' &&
-    item.broadRole !== 'other' &&
-    analysis.broadRole === item.broadRole;
-
-  const garmentTokens = tokenizeKeywords(analysis.garmentType);
-  const exactGarmentWordHit = garmentTokens.some((tok) => lowerSearchable.includes(tok));
-
-  if (roleMatches && exactGarmentWordHit) {
-    score += 34;
-    hints.push(`matching ${analysis.garmentType.toLowerCase()} silhouette`);
-  } else if (roleMatches) {
-    score += 24;
-    hints.push(`same ${item.broadRole.replace('_', '-')} category`);
-  } else if (exactGarmentWordHit) {
-    score += 20;
-    hints.push('related garment cut');
-  }
-
-  const queryColorFamilies = detectColorFamilies(
-    `${analysis.dominantColors.join(' ')} ${analysis.colorCombination}`
-  );
-  const directColorHit = analysis.dominantColors.some((c) =>
-    lowerSearchable.includes(c.split('/')[0].trim().toLowerCase())
-  );
-  const familyOverlap = queryColorFamilies.filter((f) => item.colorFamilies.includes(f));
-
-  if (directColorHit) {
-    score += 22;
-    hints.push(`close ${analysis.dominantColors[0]} color alignment`);
-  } else if (familyOverlap.length > 0) {
-    score += 15;
-    hints.push(`coordinated ${familyOverlap[0].replace('neutral_', '')} palette`);
-  }
-
-  const attrTokens = tokenizeKeywords(
-    [
-      analysis.patternOrPrint,
-      analysis.fabricAppearance,
-      analysis.silhouetteAndFit,
-      analysis.sleeveAndNeckline,
-      analysis.styleCategory,
-      ...(analysis.designDetails || []),
-    ].join(' ')
-  );
-
-  let matchedAttrCount = 0;
-  for (const tok of attrTokens) {
-    if (lowerSearchable.includes(tok)) {
-      matchedAttrCount++;
-    }
-  }
-  if (matchedAttrCount > 0) {
-    score += Math.min(20, matchedAttrCount * 5);
-    hints.push('aligned fit & styling details');
-  }
-
-  const targetGender = (prefs.gender || analysis.genderFit || '').toLowerCase();
-  const prodGender = item.product.gender_collection.toLowerCase();
-  if (!targetGender || prodGender === 'unisex' || targetGender.includes('unisex')) {
-    score += 6;
-  } else if (
-    (targetGender.startsWith('men') && prodGender === 'men') ||
-    (targetGender.startsWith('women') && prodGender === 'women')
-  ) {
-    score += 8;
-  }
-
-  if (embeddingScore > 0) {
-    score += Math.round(embeddingScore * 20);
-  }
-
-  if (prefs.budgetInr && item.effectivePrice <= prefs.budgetInr) {
-    score += 4;
-  }
-  if (
-    prefs.preferredSize &&
-    item.availableSizes.some((s) => s.toLowerCase() === prefs.preferredSize!.toLowerCase())
-  ) {
-    score += 4;
-  }
-
-  if (!item.inStock) {
-    score = Math.max(1, score - 25);
-  }
-
-  const clampedScore = Math.max(8, Math.min(99, score));
-  let preliminaryTier: MatchTier = 'alternative_style';
-  if (clampedScore >= 52 && (roleMatches || exactGarmentWordHit)) {
-    preliminaryTier = 'very_similar';
-  }
-
-  return { score: clampedScore, preliminaryTier, reasonHints: hints };
-}
-
-async function fetchProductImageInlinePart(
-  imageUrl: string
-): Promise<{ inlineData: { mimeType: string; data: string } } | null> {
-  if (!imageUrl || !imageUrl.startsWith('http')) return null;
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 2000);
-  try {
-    const resp = await fetch(imageUrl, { signal: controller.signal });
-    if (!resp.ok) return null;
-    const contentType = (resp.headers.get('content-type') || 'image/jpeg').split(';')[0].trim().toLowerCase();
-    const normMime = contentType === 'image/jpg' ? 'image/jpeg' : contentType;
-    if (!ALLOWED_MIME_TYPES.has(normMime)) return null;
-    const arrayBuf = await resp.arrayBuffer();
-    if (arrayBuf.byteLength < 256 || arrayBuf.byteLength > 1.8 * 1024 * 1024) return null;
-    return {
-      inlineData: {
-        mimeType: normMime,
-        data: Buffer.from(arrayBuf).toString('base64'),
-      },
-    };
-  } catch {
-    return null;
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-async function analyzeUploadedGarmentImage(
+/**
+ * Side-by-side AI Vision verification on category-compatible top candidates so visual nuance
+ * (exact stripe thickness, neckline shape, print similarity) refines scores & explanations accurately.
+ */
+async function refineCompatibleCandidatesWithVision(
   ai: GoogleGenAI,
-  mimeType: string,
-  base64Data: string,
-  userMessage?: string
-): Promise<VisualGarmentAnalysis> {
-  const parsed = await generateStructuredJsonWithFailover(
+  refMimeType: string,
+  refBase64: string,
+  refAnalysis: VisualGarmentAnalysis,
+  candidates: EvaluatedVisualCandidate[]
+): Promise<void> {
+  if (candidates.length === 0) return;
+  const topToVerify = candidates.slice(0, 4);
+
+  const imageParts = await Promise.all(
+    topToVerify.map((c) => resolveProductImageInlinePart(c.item.mainImageUrl))
+  );
+
+  // Only run side-by-side vision if at least one candidate image loaded
+  if (!imageParts.some(Boolean)) return;
+
+  const parts: any[] = [
+    { text: `REFERENCE UPLOADED PHOTO (${refAnalysis.summary}):` },
+    { inlineData: { mimeType: refMimeType, data: refBase64 } },
+  ];
+
+  topToVerify.forEach((cand, i) => {
+    if (!imageParts[i]) return;
+    parts.push({
+      text: `CANDIDATE #${i + 1} — productId: "${cand.item.product.id}", title: "${cand.item.product.name}", detected profile: "${cand.item.visualProfile?.summary || ''}"`,
+    });
+    parts.push(imageParts[i]);
+  });
+
+  parts.push({
+    text: `Compare each CANDIDATE image directly against the REFERENCE UPLOADED PHOTO.
+STRICT RULES:
+1. Set isTrulyExactItem = true ONLY if the candidate photo shows the exact same garment design, color, pattern, collar/sleeves, and cut.
+2. Give visualSimilarityScore (0 to 100):
+   - 82-98 ONLY if garment type, primary color, AND pattern all visually match closely.
+   - 58-81 if garment type, primary color family, and overall silhouette visually resemble the reference.
+   - 10-52 if the primary color OR pattern OR garment subtype differs noticeably (e.g. plain shirt vs striped/checked shirt, white/blue dress vs black floral dress, button-down shirt vs oversized T-shirt).
+3. Write a concise 1-sentence explanation citing the specific visual attributes that match or differ.`,
+  });
+
+  const verified = await generateStructuredJsonWithFailover(
     ai,
-    {
-      parts: [
-        { inlineData: { mimeType, data: base64Data } },
-        {
-          text:
-            `Analyze this fashion/clothing photo uploaded by a Form & Fit shopper.` +
-            (userMessage ? ` Shopper note: "${userMessage}".` : '') +
-            ` Identify the primary garment or fashion item visible with accurate fashion terminology.`,
-        },
-      ],
-    },
-    'You are an expert fashion merchandiser and visual garment analyst for Form & Fit. Extract accurate, objective visual attributes of the clothing, footwear, or accessory shown in the image. If no fashion, apparel, footwear, or accessory item is visible at all, set isClothingDetected to false and explain politely in summary.',
+    { parts },
+    'You are a strict visual product matching judge for Form & Fit. Penalize conflicting colors and conflicting patterns heavily. Never claim a match is exact without strong visual proof.',
     {
       type: Type.OBJECT,
       properties: {
-        isClothingDetected: { type: Type.BOOLEAN },
-        summary: { type: Type.STRING },
-        garmentType: { type: Type.STRING },
-        broadRole: { type: Type.STRING },
-        genderFit: { type: Type.STRING },
-        dominantColors: { type: Type.ARRAY, items: { type: Type.STRING } },
-        colorCombination: { type: Type.STRING },
-        patternOrPrint: { type: Type.STRING },
-        fabricAppearance: { type: Type.STRING },
-        silhouetteAndFit: { type: Type.STRING },
-        sleeveAndNeckline: { type: Type.STRING },
-        styleCategory: { type: Type.STRING },
-        designDetails: { type: Type.ARRAY, items: { type: Type.STRING } },
-        outfitPairingIdeas: { type: Type.ARRAY, items: { type: Type.STRING } },
+        evaluations: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              productId: { type: Type.STRING },
+              isTrulyExactItem: { type: Type.BOOLEAN },
+              visualSimilarityScore: { type: Type.INTEGER },
+              explanation: { type: Type.STRING },
+            },
+            required: ['productId', 'isTrulyExactItem', 'visualSimilarityScore', 'explanation'],
+          },
+        },
       },
-      required: [
-        'isClothingDetected',
-        'summary',
-        'garmentType',
-        'broadRole',
-        'genderFit',
-        'dominantColors',
-        'colorCombination',
-        'patternOrPrint',
-        'fabricAppearance',
-        'silhouetteAndFit',
-        'sleeveAndNeckline',
-        'styleCategory',
-        'designDetails',
-        'outfitPairingIdeas',
-      ],
+      required: ['evaluations'],
     },
-    0.2
+    0.1
   );
 
-  if (!parsed) {
-    return classifyImageViaMultimodalEmbeddings(ai, mimeType, base64Data, userMessage);
+  if (!verified || !Array.isArray(verified.evaluations)) return;
+
+  const { exact: exactThreshold, strong: strongThreshold } = getMatchThresholds();
+
+  for (const ev of verified.evaluations) {
+    const target = topToVerify.find((c) => c.item.product.id === String(ev.productId));
+    if (!target) continue;
+
+    const visionScore = Math.max(0, Math.min(99, Number(ev.visualSimilarityScore ?? target.finalScore)));
+    let blended = Math.round(target.finalScore * 0.55 + visionScore * 0.45);
+
+    // Re-enforce hard color/pattern/subtype ceilings so LLM generosity can never promote a wrong color or pattern!
+    if (!target.exactSubtypeMatch) {
+      blended = Math.min(blended, 48);
+    } else if (target.colorStatus === 'conflict' || target.patternStatus === 'conflict') {
+      blended = Math.min(blended, 52);
+    }
+
+    target.finalScore = blended;
+
+    if (
+      Boolean(ev.isTrulyExactItem) &&
+      blended >= exactThreshold &&
+      target.exactSubtypeMatch &&
+      target.colorStatus === 'exact' &&
+      target.patternStatus === 'exact'
+    ) {
+      target.matchTier = 'exact_match';
+    } else if (blended >= strongThreshold && target.categoryCompatible) {
+      target.matchTier = 'very_similar';
+    } else {
+      target.matchTier = 'alternative_style';
+    }
+
+    const cleanExp = String(ev.explanation || '').trim();
+    if (cleanExp.length >= 16) {
+      target.explanation = cleanExp;
+    }
+  }
+}
+
+function toRecommendationPayload(ev: EvaluatedVisualCandidate): StylistProductRecommendation {
+  // Surface actual visual color alongside configured variant colors if helpful
+  const colors = [...ev.item.availableColors];
+  if (ev.item.visualProfile?.primaryColor) {
+    const visCol = capitalizeWords(ev.item.visualProfile.primaryColor);
+    if (!colors.some((c) => c.name.toLowerCase() === visCol.toLowerCase())) {
+      colors.unshift({ name: visCol });
+    }
   }
 
-  const allowedRoles = new Set(['top', 'bottom', 'one_piece', 'outerwear', 'footwear', 'accessory', 'other']);
-  const normalizedRole = allowedRoles.has(String(parsed.broadRole || '').toLowerCase())
-    ? (String(parsed.broadRole).toLowerCase() as VisualGarmentAnalysis['broadRole'])
-    : 'other';
-
   return {
-    isClothingDetected: Boolean(parsed.isClothingDetected),
-    summary: String(parsed.summary || 'Analyzed uploaded fashion image.'),
-    garmentType: String(parsed.garmentType || 'Apparel'),
-    broadRole: normalizedRole,
-    genderFit: String(parsed.genderFit || 'Unisex'),
-    dominantColors: Array.isArray(parsed.dominantColors) ? parsed.dominantColors.map(String).slice(0, 4) : [],
-    colorCombination: String(parsed.colorCombination || 'Neutral palette'),
-    patternOrPrint: String(parsed.patternOrPrint || 'Solid'),
-    fabricAppearance: String(parsed.fabricAppearance || 'Woven / Knit'),
-    silhouetteAndFit: String(parsed.silhouetteAndFit || 'Regular fit'),
-    sleeveAndNeckline: String(parsed.sleeveAndNeckline || 'Standard cut'),
-    styleCategory: String(parsed.styleCategory || 'Minimalist'),
-    designDetails: Array.isArray(parsed.designDetails) ? parsed.designDetails.map(String).slice(0, 6) : [],
-    outfitPairingIdeas: Array.isArray(parsed.outfitPairingIdeas)
-      ? parsed.outfitPairingIdeas.map(String).slice(0, 4)
-      : [],
+    product: ev.item.product,
+    matchTier: ev.matchTier,
+    matchScore: ev.finalScore,
+    matchReason: ev.explanation,
+    inStock: ev.item.inStock,
+    totalStock: ev.item.totalStock,
+    effectivePrice: ev.item.effectivePrice,
+    availableSizes: ev.item.availableSizes,
+    availableColors: colors,
   };
 }
 
 // ============================================================================
-// NATURAL-LANGUAGE PREFERENCE EXTRACTION & OUTFIT BUILDER HELPERS
+// CONVERSATIONAL STYLING & OUTFIT HELPERS (NON-IMAGE QUERIES)
 // ============================================================================
 function extractPreferencesFromMessageHeuristically(
   message: string,
@@ -1158,19 +1764,6 @@ function extractPreferencesFromMessageHeuristically(
   const sizeMatch = message.match(/\b(?:size\s*)?(xxs|xs|s|m|l|xl|xxl|2xl|3xl)\b/i);
   if (sizeMatch?.[1] && (/\bsize\b/i.test(message) || /^(xs|s|m|l|xl|xxl)$/i.test(message.trim()))) {
     next.preferredSize = sizeMatch[1].toUpperCase();
-  }
-
-  const detectedCols: string[] = [];
-  for (const [, synonyms] of Object.entries(COLOR_FAMILIES)) {
-    for (const term of synonyms) {
-      if (new RegExp(`\\b${term}\\b`, 'i').test(lower)) {
-        detectedCols.push(capitalizeWords(term));
-        break;
-      }
-    }
-  }
-  if (detectedCols.length > 0) {
-    next.colors = Array.from(new Set([...(existing.colors || []), ...detectedCols])).slice(0, 4);
   }
 
   return next;
@@ -1239,7 +1832,7 @@ function buildCoordinatedOutfitFromCatalog(
           ) as Array<EnrichedCatalogItem['broadRole']>);
 
     const primaryFamily = primary.colorFamilies[0];
-    const complementary = primaryFamily ? COMPLEMENTARY_COLOR_FAMILIES[primaryFamily] || [] : [];
+    const complementary = primaryFamily ? COMPLEMENTARY_OUTFIT_COLORS[primaryFamily] || [] : [];
 
     for (const role of desiredRoles) {
       const candidate =
@@ -1281,7 +1874,7 @@ function buildCoordinatedOutfitFromCatalog(
   );
   const withinBudget = prefs.budgetInr ? totalPrice <= prefs.budgetInr : true;
 
-  const coveredRoles = new Set(chosenPieces.map((p) => inferBroadRole(p.product)));
+  const coveredRoles = new Set(chosenPieces.map((p) => inferBroadRoleFromMetadata(p.product)));
   const missingLabels: string[] = [];
   if (!coveredRoles.has('one_piece')) {
     if (!coveredRoles.has('top')) missingLabels.push('topwear');
@@ -1291,14 +1884,14 @@ function buildCoordinatedOutfitFromCatalog(
 
   const missingCategoryNote =
     missingLabels.length > 0
-      ? `Showing live published pieces currently available in Form & Fit. Pair with neutral ${missingLabels.join(' and ')} to complete the head-to-toe look as new drops arrive.`
+      ? `Showing live published pieces currently available in Form & Fit. Pair with neutral ${missingLabels.join(' and ')} to complete the head-to-toe look.`
       : undefined;
 
   return {
     title: aiTitle || `${prefs.style ? capitalizeWords(prefs.style) : 'Signature Form & Fit'} Edit`,
     occasion: aiOccasion || (prefs.occasion ? capitalizeWords(prefs.occasion) : 'Everyday & Smart Casual'),
     colorCoordination:
-      aiColorCoordination || 'Balanced warm neutrals with crisp tonal contrast for effortless wearability.',
+      aiColorCoordination || 'Balanced tones with crisp contrast for effortless wearability.',
     stylingSummary:
       aiStylingSummary ||
       'Curated exclusively from live Form & Fit catalog pieces with real-time pricing and stock availability.',
@@ -1330,7 +1923,7 @@ function formatRoleLabel(role: EnrichedCatalogItem['broadRole']): string {
 }
 
 function capitalizeWords(str: string): string {
-  return str.replace(/\b\w/g, (c) => c.toUpperCase());
+  return (str || '').replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 // ============================================================================
@@ -1350,7 +1943,7 @@ export async function handleStylistApi(req: any, res: any) {
   const rate = checkRateLimit(clientIp);
   if (!rate.allowed) {
     res.setHeader('Retry-After', String(rate.retryAfterSeconds));
-    const payload: StylistApiResponse = {
+    return res.status(429).json({
       success: false,
       reply: '',
       preferences: {},
@@ -1359,8 +1952,7 @@ export async function handleStylistApi(req: any, res: any) {
       error: `You're styling fast! Please wait ${rate.retryAfterSeconds} seconds before sending another request.`,
       errorCode: 'RATE_LIMITED',
       retryAfterSeconds: rate.retryAfterSeconds,
-    };
-    return res.status(429).json(payload);
+    } satisfies StylistApiResponse);
   }
 
   const body = await parseJsonBody(req);
@@ -1379,8 +1971,10 @@ export async function handleStylistApi(req: any, res: any) {
         : undefined,
     preferredSize: body.preferences?.preferredSize,
   };
+
+  const { strong: strongThreshold, initialLimit } = getMatchThresholds();
   const offset = Math.max(0, Number(body.offset ?? 0));
-  const limit = Math.max(1, Math.min(8, Number(body.limit ?? 4)));
+  const limit = Math.max(1, Math.min(6, Number(body.limit ?? initialLimit)));
   const history = Array.isArray(body.history) ? body.history.slice(-10) : [];
 
   const imgValidation = validateAndSanitizeImage(body.image);
@@ -1407,7 +2001,7 @@ export async function handleStylistApi(req: any, res: any) {
     });
   }
 
-  // Verify Shared Supabase Catalog Connection (Zero fake/demo fallback!)
+  // Retrieve live published catalog from Supabase (Never use hardcoded demo products!)
   const catalogResult = await fetchPublishedCatalog();
   if (!catalogResult.ok) {
     return res.status(503).json({
@@ -1424,7 +2018,7 @@ export async function handleStylistApi(req: any, res: any) {
   const catalog = catalogResult.items;
   const inStockCount = catalog.filter((c) => c.inStock).length;
 
-  const ai = getGeminiClient(15000);
+  const ai = getGeminiClient(14000);
   if (!ai) {
     return res.status(503).json({
       success: false,
@@ -1440,22 +2034,37 @@ export async function handleStylistApi(req: any, res: any) {
 
   try {
     // ========================================================================
-    // FLOW 1: VISUAL PRODUCT SEARCH ("Find this style" / Image Uploaded / Load More)
+    // FLOW 1: IMAGE-BASED VISUAL PRODUCT MATCHING ("Find this style")
     // ========================================================================
     if (imgValidation.base64Data || body.cachedAnalysis) {
-      const analysis: VisualGarmentAnalysis = body.cachedAnalysis
-        ? body.cachedAnalysis
-        : await analyzeUploadedGarmentImage(
+      // Step 1: Analyze the uploaded reference image using AI Vision (never skip or return full catalog on failure!)
+      const analysis: VisualGarmentAnalysis | null = body.cachedAnalysis
+        ? normalizeVisionAnalysisObject(body.cachedAnalysis)
+        : await analyzeGarmentImageWithVision(
             ai,
             imgValidation.mimeType!,
             imgValidation.base64Data!,
-            userMessage
+            userMessage ? `Customer note: "${userMessage}"` : ''
           );
+
+      if (!analysis) {
+        return res.status(503).json({
+          success: false,
+          reply: '',
+          preferences: currentPrefs,
+          followUpSuggestions: [],
+          recommendations: [],
+          error:
+            'Unable to analyze the uploaded clothing image right now due to temporary AI vision service load. Please tap Retry in a moment.',
+          errorCode: 'VISION_ANALYSIS_FAILED',
+        } satisfies StylistApiResponse);
+      }
 
       if (!analysis.isClothingDetected) {
         return res.status(200).json({
           success: true,
-          reply: `${analysis.summary} Please upload or snap a clear photo of clothing, shoes, or accessories—like an outfit from Instagram, Pinterest, or your wardrobe—and I'll match it against the Form & Fit catalog.`,
+          reply:
+            'I could not detect a clothing item, footwear, or fashion accessory in this photo. Please upload a clear photo of the garment you would like to match.',
           preferences: currentPrefs,
           followUpSuggestions: ['Find my style', 'Style an outfit', 'Build an outfit under my budget'],
           visualAnalysis: analysis,
@@ -1464,235 +2073,164 @@ export async function handleStylistApi(req: any, res: any) {
         } satisfies StylistApiResponse);
       }
 
-      if (catalog.length === 0) {
+      if (catalog.length === 0 || inStockCount === 0) {
         return res.status(200).json({
           success: true,
-          reply: `I analyzed your photo (${analysis.summary.toLowerCase()}), featuring a ${analysis.silhouetteAndFit.toLowerCase()} ${analysis.garmentType.toLowerCase()} in ${analysis.dominantColors.join(', ') || 'neutral tones'}. However, there are currently no published products in the Form & Fit catalog yet. As soon as products are published in the Admin Dashboard, they will automatically appear in visual search.`,
+          reply: `Detected: ${analysis.summary}. There are currently no in-stock published products in the Form & Fit catalog to match against.`,
           preferences: currentPrefs,
-          followUpSuggestions: ['Find my style', 'Recommend products for an occasion'],
+          followUpSuggestions: ['Find my style'],
           visualAnalysis: analysis,
           recommendations: [],
-          catalogStats: { totalPublished: 0, inStockCount: 0 },
+          catalogStats: { totalPublished: catalog.length, inStockCount },
         } satisfies StylistApiResponse);
       }
 
-      const queryEmbedParts: Array<string | { inlineData: { data: string; mimeType: string } }> = [
-        `${analysis.garmentType}. ${analysis.summary}. Colors: ${analysis.dominantColors.join(', ')}. Style: ${analysis.styleCategory}. Pattern: ${analysis.patternOrPrint}. Fabric: ${analysis.fabricAppearance}. Fit: ${analysis.silhouetteAndFit}. ${userMessage}`,
-      ];
-      if (imgValidation.base64Data && imgValidation.mimeType) {
-        queryEmbedParts.push({
-          inlineData: {
-            data: imgValidation.base64Data,
-            mimeType: imgValidation.mimeType,
-          },
-        });
+      // Step 2: Visually index real catalog product images + compute pure image-to-image embeddings in parallel
+      const [queryImageVector] = await Promise.all([
+        imgValidation.base64Data && imgValidation.mimeType
+          ? embedSingleImageBytes(ai, imgValidation.mimeType, imgValidation.base64Data)
+          : Promise.resolve(null),
+        enrichCatalogWithVisualIntelligence(ai, catalog),
+      ]);
+
+      // Step 3: Evaluate every in-stock imaged catalog product with strict 6-priority scoring & penalties
+      const evaluatedAll = catalog
+        .filter((item) => item.inStock && item.hasRealCatalogImage)
+        .map((item) => evaluateCandidateAgainstReference(analysis, item, queryImageVector));
+
+      // Keep strictly category-compatible candidates for visual verification
+      const categoryCompatiblePool = evaluatedAll
+        .filter((ev) => ev.categoryCompatible)
+        .sort((a, b) => b.finalScore - a.finalScore);
+
+      // Step 4: Direct side-by-side AI Vision verification ONLY on non-conflicting same-subtype candidates
+      const viableVisionCandidates = categoryCompatiblePool.filter(
+        (ev) =>
+          ev.exactSubtypeMatch &&
+          ev.colorStatus !== 'conflict' &&
+          ev.patternStatus !== 'conflict'
+      );
+      if (offset === 0 && imgValidation.base64Data && imgValidation.mimeType && viableVisionCandidates.length > 0) {
+        await refineCompatibleCandidatesWithVision(
+          ai,
+          imgValidation.mimeType,
+          imgValidation.base64Data,
+          analysis,
+          viableVisionCandidates
+        );
+        categoryCompatiblePool.sort((a, b) => b.finalScore - a.finalScore);
       }
 
-      const { scores: semanticMap } = await computeSemanticSimilarities(ai, queryEmbedParts, catalog);
+      // Step 5: Strict Filtering & Thresholding (NEVER return the full catalog!)
+      // 1) High-confidence visual matches (score >= strongThreshold, exact subtype, no color/pattern conflict)
+      const strongMatches = categoryCompatiblePool.filter(
+        (ev) =>
+          ev.finalScore >= strongThreshold &&
+          ev.exactSubtypeMatch &&
+          ev.colorStatus !== 'conflict' &&
+          ev.patternStatus !== 'conflict'
+      );
 
-      const preliminarilyRanked = catalog
-        .map((item) => {
-          const sem = semanticMap.get(item.product.id) || 0;
-          const scored = scoreCatalogItemForVisualAnalysis(item, analysis, currentPrefs, sem);
-          return {
-            item,
-            score: scored.score,
-            tier: scored.preliminaryTier,
-            hints: scored.reasonHints,
-          };
-        })
-        .sort((a, b) => b.score - a.score);
+      // 2) Moderate closest visual styles in the SAME garment subtype (e.g. plain navy shirt when searching navy striped shirt: matching category + matching color, different pattern; score 42..strongThreshold-1)
+      const moderateClosestInSubtype = categoryCompatiblePool.filter(
+        (ev) =>
+          !strongMatches.includes(ev) &&
+          ev.exactSubtypeMatch &&
+          (ev.colorStatus === 'exact' || ev.patternStatus === 'exact') &&
+          ev.finalScore >= 40
+      );
 
-      let aiReply = '';
-      let wantsOutfit =
-        body.mode === 'outfit_builder' ||
-        /\b(outfit|pair|style with|goes with|wear with|complete look|match with)\b/i.test(userMessage);
-      let aiOutfitData: {
-        title?: string;
-        occasion?: string;
-        colorCoordination?: string;
-        pieces?: Array<{ productId: string; role: string; stylingNote: string }>;
-      } | null = null;
+      // 3) Same garment category in a different color (strictly same garment category — NEVER unrelated categories like footwear for a shirt!)
+      const sameCategoryDiffColorPool = categoryCompatiblePool
+        .filter(
+          (ev) =>
+            !strongMatches.includes(ev) &&
+            !moderateClosestInSubtype.includes(ev) &&
+            ev.colorStatus !== 'exact' &&
+            (ev.exactSubtypeMatch || ev.categoryCompatible)
+        )
+        .sort((a, b) => Number(b.exactSubtypeMatch) - Number(a.exactSubtypeMatch) || b.finalScore - a.finalScore)
+        .slice(0, 6);
 
-      if (offset === 0 && imgValidation.base64Data && imgValidation.mimeType) {
-        const topCandidates = preliminarilyRanked.slice(0, Math.min(6, preliminarilyRanked.length));
-        const candidateImageParts = await Promise.all(
-          topCandidates.slice(0, 4).map((c) => fetchProductImageInlinePart(c.item.mainImageUrl))
-        );
+      // 4) Similar pattern or design (strictly compatible garment category — never cross into footwear/unrelated categories)
+      const refPatGroup = normalizePatternGroup(analysis.pattern, analysis.patternScaleAndDetail || '');
+      const similarPatternPool = categoryCompatiblePool
+        .filter(
+          (ev) =>
+            !strongMatches.includes(ev) &&
+            ((refPatGroup !== 'solid' && (ev.patternStatus === 'exact' || ev.patternStatus === 'related')) ||
+              (ev.exactSubtypeMatch && ev.patternStatus === 'exact' && ev.colorStatus !== 'exact'))
+        )
+        .sort((a, b) => Number(b.exactSubtypeMatch) - Number(a.exactSubtypeMatch) || b.finalScore - a.finalScore)
+        .slice(0, 6);
 
-        const verificationParts: any[] = [
-          { text: 'CUSTOMER UPLOADED REFERENCE PHOTO:' },
-          { inlineData: { mimeType: imgValidation.mimeType, data: imgValidation.base64Data } },
-        ];
+      const hasExactMatch = strongMatches.some((m) => m.matchTier === 'exact_match');
+      const hasStrongVisualMatch = strongMatches.length > 0;
 
-        topCandidates.forEach((cand, idx) => {
-          const p = cand.item.product;
-          verificationParts.push({
-            text: `CATALOG CANDIDATE #${idx + 1}:
-- productId: "${p.id}"
-- name: "${p.name}"
-- category: "${p.category?.name || p.gender_collection}"
-- gender: "${p.gender_collection}"
-- priceInr: ${cand.item.effectivePrice}
-- inStock: ${cand.item.inStock} (sizes: ${cand.item.availableSizes.join(', ') || 'None'})
-- colors: "${cand.item.availableColors.map((c) => c.name).join(', ') || 'Standard'}"
-- fitAndFabric: "${[p.fit, p.fabric_material].filter(Boolean).join(', ') || 'Standard'}"
-- description: "${(p.short_desc || p.description || '').slice(0, 240)}"`,
-          });
-          if (idx < 4 && candidateImageParts[idx]) {
-            verificationParts.push(candidateImageParts[idx]);
-          }
-        });
+      // Paginate strictly over strongMatches (at most 6 initially)
+      const primaryEligiblePool = hasStrongVisualMatch ? strongMatches : [];
+      const pagedRecommendations = primaryEligiblePool
+        .slice(offset, offset + limit)
+        .map(toRecommendationPayload);
 
-        verificationParts.push({
-          text: `Shopper message: "${userMessage || 'Find this style in Form & Fit.'}"
-Detected garment attributes: ${JSON.stringify(analysis)}
-Compare the customer's photo against the real Form & Fit catalog candidates above.
-CRITICAL HONESTY RULES:
-1. Classify each candidate strictly as:
-   - "exact_match": ONLY when visual appearance, garment type, color, print/graphics, and cut prove it is genuinely the exact same item in the catalog. NEVER claim exact_match if it is merely similar!
-   - "very_similar": Same garment type with closely aligned color palette, cut, or vibe.
-   - "alternative_style": Closest available Form & Fit piece in a different garment category, color, or alternative vibe when no close match exists in the catalog.
-2. If NO candidate is an exact_match or very_similar match, state that honestly and warmly in your reply and present the closest available Form & Fit alternatives.`,
-        });
+      const lowConfidenceClosest = moderateClosestInSubtype.slice(0, 6).map(toRecommendationPayload);
+      const sameCatDiffColorRecs = sameCategoryDiffColorPool.map(toRecommendationPayload);
+      const similarPatternRecs = similarPatternPool.map(toRecommendationPayload);
 
-        const verifiedJson = await generateStructuredJsonWithFailover(
-          ai,
-          { parts: verificationParts },
-          'You are the Form & Fit Senior Fashion Stylist & Visual Matcher. Never invent products, prices, discounts, or sizes. Only reference productIds provided in CATALOG CANDIDATE entries.',
-          {
-            type: Type.OBJECT,
-            properties: {
-              reply: { type: Type.STRING },
-              verifiedMatches: {
-                type: Type.ARRAY,
-                items: {
-                  type: Type.OBJECT,
-                  properties: {
-                    productId: { type: Type.STRING },
-                    matchTier: { type: Type.STRING },
-                    visualScore: { type: Type.INTEGER },
-                    matchReason: { type: Type.STRING },
-                  },
-                  required: ['productId', 'matchTier', 'visualScore', 'matchReason'],
-                },
-              },
-              buildOutfit: { type: Type.BOOLEAN },
-              outfitTitle: { type: Type.STRING },
-              outfitOccasion: { type: Type.STRING },
-              outfitColorCoordination: { type: Type.STRING },
-              outfitPieces: {
-                type: Type.ARRAY,
-                items: {
-                  type: Type.OBJECT,
-                  properties: {
-                    productId: { type: Type.STRING },
-                    role: { type: Type.STRING },
-                    stylingNote: { type: Type.STRING },
-                  },
-                  required: ['productId', 'role', 'stylingNote'],
-                },
-              },
-            },
-            required: ['reply', 'verifiedMatches'],
-          },
-          0.25
-        );
+      // Build concise, factual reply grounded in the detected garment & honest match outcome
+      const colorDesc =
+        analysis.secondaryColors.length > 0
+          ? `${analysis.primaryColor} with ${analysis.secondaryColors.join(', ')}`
+          : analysis.primaryColor;
+      const patternLabel = (analysis.patternScaleAndDetail || analysis.pattern || 'solid').toLowerCase();
+      const detectedIntro = `Detected a ${colorDesc.toLowerCase()} ${analysis.garmentType.toLowerCase()} (${patternLabel}, ${analysis.silhouetteAndFit.toLowerCase()}).`;
 
-        if (verifiedJson) {
-          aiReply = String(verifiedJson.reply || '').trim();
-          const verifiedMap = new Map<
-            string,
-            { matchTier: MatchTier; visualScore: number; matchReason: string }
-          >();
+      let reply = '';
+      let lowConfidenceMessage: string | null = null;
 
-          if (Array.isArray(verifiedJson.verifiedMatches)) {
-            for (const vm of verifiedJson.verifiedMatches) {
-              const rawTier = String(vm.matchTier || '').toLowerCase();
-              const safeTier: MatchTier =
-                rawTier === 'exact_match'
-                  ? 'exact_match'
-                  : rawTier === 'very_similar'
-                  ? 'very_similar'
-                  : 'alternative_style';
-              verifiedMap.set(String(vm.productId), {
-                matchTier: safeTier,
-                visualScore: Math.max(10, Math.min(99, Number(vm.visualScore || 50))),
-                matchReason: String(vm.matchReason || '').trim(),
-              });
-            }
-          }
-
-          for (const entry of preliminarilyRanked) {
-            const v = verifiedMap.get(entry.item.product.id);
-            if (v) {
-              entry.tier = v.matchTier;
-              entry.score = Math.round(v.visualScore * 0.65 + entry.score * 0.35);
-              if (v.matchReason) {
-                entry.hints = [v.matchReason];
-              }
-            }
-          }
-          preliminarilyRanked.sort((a, b) => b.score - a.score);
-
-          if (verifiedJson.buildOutfit || wantsOutfit) {
-            wantsOutfit = true;
-            aiOutfitData = {
-              title: verifiedJson.outfitTitle,
-              occasion: verifiedJson.outfitOccasion,
-              colorCoordination: verifiedJson.outfitColorCoordination,
-              pieces: verifiedJson.outfitPieces,
-            };
-          }
+      if (offset > 0) {
+        reply = `Showing ${pagedRecommendations.length} additional matching ${pagedRecommendations.length === 1 ? 'item' : 'items'} from Form & Fit.`;
+      } else if (hasExactMatch) {
+        reply = `${detectedIntro} Found ${strongMatches.length === 1 ? 'a direct visual match' : `${strongMatches.length} close visual matches`} in the Form & Fit catalog.`;
+      } else if (hasStrongVisualMatch) {
+        lowConfidenceMessage =
+          "I couldn't find an exact match in Form & Fit. Here are the closest styles available.";
+        reply = `${detectedIntro} I couldn't find an identical piece, so here ${strongMatches.length === 1 ? 'is the closest visual match' : 'are the closest visual matches'} available in Form & Fit.`;
+      } else {
+        lowConfidenceMessage =
+          "I couldn't find an exact match in Form & Fit. Here are the closest styles available.";
+        if (
+          lowConfidenceClosest.length === 0 &&
+          sameCatDiffColorRecs.length === 0 &&
+          similarPatternRecs.length === 0
+        ) {
+          reply = `${detectedIntro} Form & Fit doesn't currently have a matching ${analysis.garmentType.toLowerCase()} in stock, so I haven't shown unrelated catalog items.`;
+        } else {
+          reply = `${detectedIntro} I couldn't find a close visual match with both the same color and pattern in Form & Fit right now. Choose an option below if you'd like to explore available ${analysis.garmentType.toLowerCase()} styles in another color or pattern.`;
         }
       }
 
-      const pageSlice = preliminarilyRanked.slice(offset, offset + limit);
-      const recommendations: StylistProductRecommendation[] = pageSlice.map((entry) => ({
-        product: entry.item.product,
-        matchTier: entry.tier,
-        matchScore: entry.score,
-        matchReason:
-          entry.hints[0] && entry.hints[0].length > 28
-            ? entry.hints[0]
-            : entry.tier === 'exact_match'
-            ? `Matches the ${analysis.garmentType.toLowerCase()} design, color palette, and cut in your photo.`
-            : entry.tier === 'very_similar'
-            ? `Shares a similar ${analysis.styleCategory.toLowerCase()} silhouette and ${entry.item.availableColors.map((c) => c.name).join('/') || 'versatile'} palette.`
-            : `Closest available Form & Fit piece offering an alternative ${entry.item.product.fit || formatRoleLabel(entry.item.broadRole).toLowerCase()} option in stock.`,
-        inStock: entry.item.inStock,
-        totalStock: entry.item.totalStock,
-        effectivePrice: entry.item.effectivePrice,
-        availableSizes: entry.item.availableSizes,
-        availableColors: entry.item.availableColors,
-      }));
+      // Only include an Outfit Suggestion if the customer explicitly asked to style/build an outfit around the photo
+      const explicitOutfitRequest =
+        body.mode === 'outfit_builder' ||
+        /\b(outfit|pair with|style with|goes with|wear with|complete look)\b/i.test(userMessage);
 
-      const hasCloseMatch = recommendations.some(
-        (r) => r.matchTier === 'exact_match' || r.matchTier === 'very_similar'
-      );
+      const outfit = explicitOutfitRequest
+        ? buildCoordinatedOutfitFromCatalog(
+            catalog,
+            strongMatches[0]?.item || categoryCompatiblePool[0]?.item || null,
+            currentPrefs
+          )
+        : null;
 
-      if (!aiReply) {
-        aiReply =
-          offset > 0
-            ? `Here ${recommendations.length === 1 ? 'is another option' : `are ${recommendations.length} more options`} from our live catalog ranked for your ${analysis.garmentType.toLowerCase()} search.`
-            : hasCloseMatch
-            ? `I spotted a ${analysis.silhouetteAndFit.toLowerCase()} ${analysis.garmentType.toLowerCase()} in ${analysis.dominantColors.join(', ') || 'neutral tones'}. Here are the closest matches from our live Form & Fit collection.`
-            : `I analyzed your ${analysis.dominantColors.join(' ')} ${analysis.garmentType.toLowerCase()} (${analysis.styleCategory.toLowerCase()} style). We don't carry an identical piece in the current Form & Fit drop, so here are our closest available catalog alternatives.`;
-      }
-
-      const outfitSuggestion =
-        offset === 0 && (wantsOutfit || catalog.length >= 2)
-          ? buildCoordinatedOutfitFromCatalog(
-              catalog,
-              preliminarilyRanked[0]?.item || null,
-              currentPrefs,
-              aiOutfitData?.pieces,
-              aiOutfitData?.title,
-              aiOutfitData?.occasion,
-              aiOutfitData?.colorCoordination,
-              undefined
-            )
-          : null;
+      const visualMatchGroups: VisualMatchGroups = {
+        hasExactMatch,
+        hasStrongVisualMatch,
+        lowConfidenceMessage,
+        closestMatches: hasStrongVisualMatch ? pagedRecommendations : lowConfidenceClosest,
+        sameCategoryDifferentColor: sameCatDiffColorRecs,
+        similarPatternOrDesign: similarPatternRecs,
+      };
 
       const updatedPrefs: StylistPreferences = {
         ...currentPrefs,
@@ -1705,21 +2243,22 @@ CRITICAL HONESTY RULES:
 
       return res.status(200).json({
         success: true,
-        reply: aiReply,
+        reply,
         preferences: updatedPrefs,
         followUpSuggestions: [
-          'Style a complete outfit around this vibe',
+          `Style an outfit for ${analysis.styleCategory.toLowerCase()} wear`,
+          'Find a product from a photo',
           'Build an outfit under ₹2,500',
-          'Show minimalist alternatives',
         ],
         visualAnalysis: analysis,
-        recommendations,
-        outfit: wantsOutfit ? outfitSuggestion : null,
+        visualMatchGroups,
+        recommendations: pagedRecommendations,
+        outfit,
         pagination: {
           offset,
           limit,
-          totalEligible: preliminarilyRanked.length,
-          hasMore: offset + limit < preliminarilyRanked.length,
+          totalEligible: primaryEligiblePool.length,
+          hasMore: offset + limit < primaryEligiblePool.length,
         },
         catalogStats: {
           totalPublished: catalog.length,
@@ -1737,7 +2276,7 @@ CRITICAL HONESTY RULES:
       return res.status(200).json({
         success: true,
         reply:
-          "Hi! I'd love to style a look for you, though our Form & Fit live catalog currently has 0 published products. Once products are published in the Admin Dashboard, I can immediately recommend pieces and build outfits from real inventory!",
+          "Hi! Our Form & Fit live catalog currently has 0 published products. Once products are published in the Admin Dashboard, I can immediately recommend pieces and build outfits from real inventory!",
         preferences: heuristicPrefs,
         followUpSuggestions: ['Find my style', 'Find a product from a photo'],
         recommendations: [],
@@ -1745,40 +2284,26 @@ CRITICAL HONESTY RULES:
       } satisfies StylistApiResponse);
     }
 
-    const { scores: semanticTextScores } = await computeSemanticSimilarities(
-      ai,
-      [
-        `${userMessage} ${heuristicPrefs.gender || ''} ${heuristicPrefs.occasion || ''} ${heuristicPrefs.style || ''} ${(heuristicPrefs.colors || []).join(' ')} ${(heuristicPrefs.clothingTypes || []).join(' ')}`.trim(),
-      ],
-      catalog
-    );
+    // Enrich catalog visual profiles so text chat ALSO knows the real visual colors & patterns of catalog items!
+    await enrichCatalogWithVisualIntelligence(ai, catalog);
 
-    const sortedForContext = [...catalog]
-      .sort((a, b) => {
-        const budgetBonusA =
-          heuristicPrefs.budgetInr && a.effectivePrice <= heuristicPrefs.budgetInr ? 0.15 : 0;
-        const budgetBonusB =
-          heuristicPrefs.budgetInr && b.effectivePrice <= heuristicPrefs.budgetInr ? 0.15 : 0;
-        const sA = (semanticTextScores.get(a.product.id) || 0) + (a.inStock ? 0.25 : 0) + budgetBonusA;
-        const sB = (semanticTextScores.get(b.product.id) || 0) + (b.inStock ? 0.25 : 0) + budgetBonusB;
-        return sB - sA;
-      })
-      .slice(0, 30);
-
-    const catalogDigest = sortedForContext.map((item) => ({
+    const catalogDigest = catalog.slice(0, 30).map((item) => ({
       productId: item.product.id,
       name: item.product.name,
       category: item.product.category?.name || item.product.gender_collection,
       role: item.broadRole,
       gender: item.product.gender_collection,
+      visualGarmentType: item.visualProfile?.garmentType || item.product.name,
+      visualPrimaryColor: item.visualProfile?.primaryColor || item.availableColors[0]?.name || 'Standard',
+      visualPattern: item.visualProfile?.patternScaleAndDetail || item.visualProfile?.pattern || 'Standard',
       effectivePriceInr: item.effectivePrice,
       regularPriceInr: item.product.regular_price,
       onSale: Boolean(item.product.sale_price && item.product.sale_price < item.product.regular_price),
       inStock: item.inStock,
       availableSizes: item.availableSizes,
       availableColors: item.availableColors.map((c) => c.name),
-      fit: item.product.fit || 'Standard',
-      fabric: item.product.fabric_material || '',
+      fit: item.visualProfile?.silhouetteAndFit || item.product.fit || 'Standard',
+      fabric: item.visualProfile?.fabricAppearance || item.product.fabric_material || '',
       shortDesc: (item.product.short_desc || item.product.description || '').slice(0, 180),
     }));
 
@@ -1801,14 +2326,14 @@ ${JSON.stringify(catalogDigest, null, 2)}
 INSTRUCTIONS:
 1. Update the shopper's session preferences (gender, occasion, style, colors, clothingTypes, budgetInr in Indian Rupees ₹, preferredSize) based on their message merged with existing session preferences.
 2. If key details would meaningfully improve recommendations (such as Men's/Women's/Unisex, occasion, style vibe, or ₹ budget), weave 1 or 2 natural, conversational styling questions into your reply.
-3. Recommend real products from LIVE PUBLISHED FORM & FIT CATALOG above (prioritizing inStock: true items, respecting budgetInr and preferredSize when specified).
+3. Recommend ONLY relevant, in-stock products from LIVE PUBLISHED FORM & FIT CATALOG (respecting gender, color, category, budgetInr, and preferredSize). Do NOT return unrelated products that clash with what the shopper asked for.
 4. NEVER invent productIds, names, prices, discounts, or sizes. ONLY output productIds that exist verbatim in LIVE PUBLISHED FORM & FIT CATALOG.
 5. Set includeOutfit = true whenever the shopper asks to style an outfit, build a look, coordinate colors, dress for an occasion, or build an outfit under a budget.`;
 
     const parsedChat = await generateStructuredJsonWithFailover(
       ai,
       chatPrompt,
-      'You are the Form & Fit Personal Fashion Stylist—warm, tasteful, knowledgeable about Indian & contemporary fashion (casual, college, office, party, wedding, travel, streetwear, minimalist, ethnic fusion), and 100% honest about real catalog availability. Keep replies concise (2-4 sentences), editorial, and helpful.',
+      'You are the Form & Fit Personal Fashion Stylist—warm, tasteful, knowledgeable about Indian & contemporary fashion, and 100% honest about real catalog availability. Keep replies concise (2-4 sentences) and accurate to visualPrimaryColor and visualPattern.',
       {
         type: Type.OBJECT,
         properties: {
@@ -1866,87 +2391,22 @@ INSTRUCTIONS:
         },
         required: ['reply', 'updatedPreferences', 'recommendedItems', 'includeOutfit', 'followUpSuggestions'],
       },
-      0.35
+      0.3
     );
 
-    const catalogById = new Map(catalog.map((c) => [c.product.id, c]));
-
-    // Seamless semantic + catalog response if generative Flash endpoints hit a temporary 503 spike
     if (!parsedChat) {
-      const asksAccessories = /\b(accessor|bag|cap|watch|belt|sunglass|shoe|footwear)\b/i.test(userMessage);
-      const filteredMatches = sortedForContext
-        .filter((item) => {
-          if (asksAccessories) {
-            return item.broadRole === 'accessory' || item.broadRole === 'footwear';
-          }
-          if (heuristicPrefs.budgetInr && sortedForContext.some((x) => x.effectivePrice <= heuristicPrefs.budgetInr!)) {
-            return item.effectivePrice <= heuristicPrefs.budgetInr;
-          }
-          return true;
-        })
-        .slice(0, 4);
-
-      const chosenList = filteredMatches.length > 0 ? filteredMatches : sortedForContext.slice(0, 4);
-      const fallbackRecs: StylistProductRecommendation[] = chosenList.map((item) => ({
-        product: item.product,
-        matchScore: Math.round(78 + (semanticTextScores.get(item.product.id) || 0.1) * 18),
-        matchReason: `Matches your ${[heuristicPrefs.occasion, heuristicPrefs.style, heuristicPrefs.gender]
-          .filter(Boolean)
-          .join(' ')
-          .toLowerCase() || 'everyday Form & Fit'} styling criteria${heuristicPrefs.budgetInr ? ` and ₹${heuristicPrefs.budgetInr.toLocaleString('en-IN')} target` : ''}.`,
-        inStock: item.inStock,
-        totalStock: item.totalStock,
-        effectivePrice: item.effectivePrice,
-        availableSizes: item.availableSizes,
-        availableColors: item.availableColors,
-      }));
-
-      const explicitOutfitIntent =
-        body.mode === 'outfit_builder' ||
-        /\b(style an outfit|build an outfit|complete look|full outfit|coordinate|under my budget|under ₹|under rs|college|office|party|occasion)\b/i.test(
-          userMessage
-        );
-
-      const outfit = explicitOutfitIntent
-        ? buildCoordinatedOutfitFromCatalog(catalog, chosenList[0] || null, heuristicPrefs)
-        : null;
-
-      const missingFollowUpQuestions: string[] = [];
-      if (!heuristicPrefs.gender) missingFollowUpQuestions.push("Men's, Women's, or Unisex fits");
-      if (!heuristicPrefs.occasion) missingFollowUpQuestions.push('the occasion (casual, college, office, or party)');
-      if (!heuristicPrefs.budgetInr) missingFollowUpQuestions.push('your preferred budget in ₹');
-
-      const replyParts: string[] = [];
-      if (asksAccessories && filteredMatches.length === 0) {
-        replyParts.push(
-          "We don't currently have standalone accessories or footwear published in stock yet, so I've pulled our most versatile published Form & Fit pieces below."
-        );
-      } else {
-        replyParts.push(
-          `Here ${fallbackRecs.length === 1 ? 'is a standout piece' : 'are curated pieces'} from our live Form & Fit catalog${heuristicPrefs.occasion ? ` for ${heuristicPrefs.occasion.toLowerCase()} wear` : ''}${heuristicPrefs.budgetInr ? ` tailored to your ₹${heuristicPrefs.budgetInr.toLocaleString('en-IN')} budget` : ''}.`
-        );
-      }
-      if (missingFollowUpQuestions.length > 0) {
-        replyParts.push(
-          `Tell me ${missingFollowUpQuestions.slice(0, 2).join(' and ')} if you'd like me to refine the look further.`
-        );
-      }
-
-      return res.status(200).json({
-        success: true,
-        reply: replyParts.join(' '),
+      return res.status(503).json({
+        success: false,
+        reply: '',
         preferences: heuristicPrefs,
-        followUpSuggestions: [
-          'Style for Men · Casual under ₹2,000',
-          'Style for Women · Smart Casual',
-          'Find a product from a photo',
-        ],
-        recommendations: fallbackRecs,
-        outfit,
-        catalogStats: { totalPublished: catalog.length, inStockCount },
+        followUpSuggestions: [],
+        recommendations: [],
+        error: 'Our AI stylist is temporarily busy. Please tap Retry in a moment.',
+        errorCode: 'SERVER_ERROR',
       } satisfies StylistApiResponse);
     }
 
+    const catalogById = new Map(catalog.map((c) => [c.product.id, c]));
     const rawPrefs = parsedChat.updatedPreferences || {};
     const mergedPrefs: StylistPreferences = {
       gender: rawPrefs.gender || heuristicPrefs.gender || undefined,
@@ -1972,7 +2432,7 @@ INSTRUCTIONS:
     if (Array.isArray(parsedChat.recommendedItems)) {
       for (const rec of parsedChat.recommendedItems) {
         const item = catalogById.get(String(rec.productId));
-        if (!item || seenRecIds.has(item.product.id)) continue;
+        if (!item || !item.inStock || seenRecIds.has(item.product.id)) continue;
         seenRecIds.add(item.product.id);
         recommendations.push({
           product: item.product,
@@ -2020,7 +2480,7 @@ INSTRUCTIONS:
         'Here are curated options from our live Form & Fit catalog.',
       preferences: mergedPrefs,
       followUpSuggestions: followUps,
-      recommendations,
+      recommendations: recommendations.slice(0, 6),
       outfit,
       catalogStats: {
         totalPublished: catalog.length,
@@ -2058,7 +2518,7 @@ INSTRUCTIONS:
         followUpSuggestions: [],
         recommendations: [],
         error:
-          'Our AI stylist is experiencing high demand right now. Please wait a few seconds and retry—or upgrade API quota in Settings > Secrets for higher throughput.',
+          'Our AI stylist is experiencing high demand right now. Please wait a few seconds and retry.',
         errorCode: 'GEMINI_QUOTA_OR_AUTH',
       } satisfies StylistApiResponse);
     }
