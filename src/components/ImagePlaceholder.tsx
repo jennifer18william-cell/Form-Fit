@@ -7,7 +7,7 @@ interface ImagePlaceholderProps {
 }
 
 export const ImagePlaceholder: React.FC<ImagePlaceholderProps> = ({
-  title = 'Form & Fit',
+  title = 'PatanaKart',
   className = '',
   aspectRatio = 'aspect-[3/4]',
 }) => {
@@ -17,7 +17,7 @@ export const ImagePlaceholder: React.FC<ImagePlaceholderProps> = ({
     >
       <div className="border border-[#E5E4DF] rounded-md p-4 w-full max-w-[180px] flex flex-col items-center justify-center bg-white">
         <span className="font-space font-semibold tracking-wider text-[11px] uppercase text-[#64748B] mb-1">
-          Form &amp; Fit
+          PatanaKart
         </span>
         <span className="font-space text-sm font-semibold truncate max-w-full text-[#18181B]">
           {title}

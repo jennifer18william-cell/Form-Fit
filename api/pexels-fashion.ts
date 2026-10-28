@@ -112,7 +112,7 @@ export default async function handler(req: any, res: any) {
       id: String(p.id),
       url: p.src.large || p.src.medium,
       originalUrl: p.src.original,
-      alt: p.alt || 'Form & Fit Category Fashion Photography',
+      alt: p.alt || 'PatanaKart Category Fashion Photography',
       photographer: p.photographer,
       photographerUrl: p.photographer_url,
     }));

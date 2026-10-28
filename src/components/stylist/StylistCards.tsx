@@ -162,7 +162,7 @@ export const ProductRecommendationCard: React.FC<ProductRecommendationCardProps>
             />
           ) : (
             <div className="w-full h-full flex items-center justify-center text-[11px] text-[#71717A]">
-              Form &amp; Fit
+              PatanaKart
             </div>
           )}
         </Link>
@@ -501,9 +501,9 @@ export const VisualMatchResultsSection: React.FC<VisualMatchResultsSectionProps>
               {activeTab === 'closest' &&
                 'No close color-and-pattern matches are currently in stock for this garment.'}
               {activeTab === 'different_color' &&
-                'No other colors in this garment category are currently available in Form & Fit.'}
+                'No other colors in this garment category are currently available in PatanaKart.'}
               {activeTab === 'similar_pattern' &&
-                'No items with a matching pattern or print are currently available in Form & Fit.'}
+                'No items with a matching pattern or print are currently available in PatanaKart.'}
             </div>
           )}
         </div>

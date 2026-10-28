@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, useSearchParams, Link } from 'react-router-dom';
 import { useStore } from '../context/StoreContext';
 import { useAuth } from '../context/AuthContext';
+import { useNotifications } from '../context/NotificationContext';
 import { CustomerAuth } from './CustomerAuth';
 import { ShippingAddress } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
@@ -17,16 +18,56 @@ import {
   Plus,
   Save,
   ArrowRight,
+  Bell,
+  Mail,
+  Phone,
+  CheckCheck,
 } from 'lucide-react';
 
 export const CustomerAccount: React.FC = () => {
   const { id: orderNumberParam } = useParams<{ id?: string }>();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { orders, wishlist, addresses, saveAddress } = useStore();
   const { user, logout, updateProfile, isOwner } = useAuth();
+  const {
+    notifications,
+    unreadCount,
+    preferences,
+    updatePreferences,
+    markAsRead,
+  } = useNotifications();
 
-  const [activeTab, setActiveTab] = useState<'orders' | 'profile' | 'addresses' | 'wishlist'>(
-    'orders'
+  const tabParam = searchParams.get('tab');
+  const [activeTab, setActiveTab] = useState<
+    'orders' | 'profile' | 'addresses' | 'wishlist' | 'notifications'
+  >(
+    tabParam === 'notifications' ||
+      tabParam === 'profile' ||
+      tabParam === 'addresses' ||
+      tabParam === 'wishlist'
+      ? tabParam
+      : 'orders'
   );
+
+  useEffect(() => {
+    const nextTab = searchParams.get('tab');
+    if (
+      nextTab === 'orders' ||
+      nextTab === 'profile' ||
+      nextTab === 'addresses' ||
+      nextTab === 'wishlist' ||
+      nextTab === 'notifications'
+    ) {
+      setActiveTab(nextTab);
+    }
+  }, [searchParams]);
+
+  const selectTab = (
+    tab: 'orders' | 'profile' | 'addresses' | 'wishlist' | 'notifications'
+  ) => {
+    setActiveTab(tab);
+    setSearchParams(tab === 'orders' ? {} : { tab }, { replace: true });
+  };
 
   const [fullName, setFullName] = useState(user?.full_name || '');
   const [phone, setPhone] = useState(user?.phone || '');
@@ -256,7 +297,7 @@ export const CustomerAccount: React.FC = () => {
       <div className="border-b border-[#E5E4DF] pb-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <span className="text-xs font-space font-semibold uppercase tracking-wider text-[#4D7C0F]">
-            Form &amp; Fit Member Portal
+            PatanaKart Member Portal
           </span>
           <h1 className="font-space font-bold text-3xl tracking-tight text-[#18181B] mt-0.5">
             Welcome, {user.full_name || 'Valued Member'}
@@ -292,7 +333,7 @@ export const CustomerAccount: React.FC = () => {
 
           <div className="space-y-1 text-xs font-medium">
             <button
-              onClick={() => setActiveTab('orders')}
+              onClick={() => selectTab('orders')}
               className={`w-full text-left py-2.5 px-3 rounded-lg flex items-center justify-between transition-colors cursor-pointer ${
                 activeTab === 'orders'
                   ? 'bg-[#F4FBE1] text-[#3F6212] border border-[#BEF264] font-semibold'
@@ -306,7 +347,21 @@ export const CustomerAccount: React.FC = () => {
             </button>
 
             <button
-              onClick={() => setActiveTab('profile')}
+              onClick={() => selectTab('notifications')}
+              className={`w-full text-left py-2.5 px-3 rounded-lg flex items-center justify-between transition-colors cursor-pointer ${
+                activeTab === 'notifications'
+                  ? 'bg-[#F4FBE1] text-[#3F6212] border border-[#BEF264] font-semibold'
+                  : 'text-[#52525B] hover:bg-[#F3F2EE]'
+              }`}
+            >
+              <span className="flex items-center gap-2">
+                <Bell size={15} /> Notifications ({unreadCount > 0 ? `${unreadCount} new` : notifications.length})
+              </span>
+              <ChevronRight size={14} />
+            </button>
+
+            <button
+              onClick={() => selectTab('profile')}
               className={`w-full text-left py-2.5 px-3 rounded-lg flex items-center justify-between transition-colors cursor-pointer ${
                 activeTab === 'profile'
                   ? 'bg-[#F4FBE1] text-[#3F6212] border border-[#BEF264] font-semibold'
@@ -320,7 +375,7 @@ export const CustomerAccount: React.FC = () => {
             </button>
 
             <button
-              onClick={() => setActiveTab('addresses')}
+              onClick={() => selectTab('addresses')}
               className={`w-full text-left py-2.5 px-3 rounded-lg flex items-center justify-between transition-colors cursor-pointer ${
                 activeTab === 'addresses'
                   ? 'bg-[#F4FBE1] text-[#3F6212] border border-[#BEF264] font-semibold'
@@ -334,7 +389,7 @@ export const CustomerAccount: React.FC = () => {
             </button>
 
             <button
-              onClick={() => setActiveTab('wishlist')}
+              onClick={() => selectTab('wishlist')}
               className={`w-full text-left py-2.5 px-3 rounded-lg flex items-center justify-between transition-colors cursor-pointer ${
                 activeTab === 'wishlist'
                   ? 'bg-[#F4FBE1] text-[#3F6212] border border-[#BEF264] font-semibold'
@@ -711,6 +766,205 @@ export const CustomerAccount: React.FC = () => {
                     ))}
                   </div>
                 )}
+              </motion.div>
+            )}
+
+            {/* Notifications & Registered Contact Alerts Tab */}
+            {activeTab === 'notifications' && (
+              <motion.div
+                key="notifications"
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                className="bg-white border border-[#E5E4DF] rounded-xl p-6 space-y-8"
+              >
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#E5E4DF] pb-4">
+                  <div>
+                    <h3 className="font-space font-bold text-base text-[#18181B]">
+                      Email &amp; Mobile SMS Notifications
+                    </h3>
+                    <p className="text-xs text-[#64748B] mt-0.5">
+                      Receive instant notifications on your registered email and mobile number when
+                      you add items to your bag, save to wishlist, or place an order.
+                    </p>
+                  </div>
+                  {unreadCount > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => markAsRead()}
+                      className="px-3 py-1.5 text-xs font-semibold text-[#4D7C0F] hover:bg-[#F4FBE1] rounded-md inline-flex items-center gap-1.5 cursor-pointer self-start sm:self-auto"
+                    >
+                      <CheckCheck size={14} /> Mark all as read
+                    </button>
+                  )}
+                </div>
+
+                {/* Registered Contact Channels */}
+                <form
+                  onSubmit={handleUpdateProfile}
+                  className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end pb-6 border-b border-[#E5E4DF]"
+                >
+                  <div className="md:col-span-5 space-y-1 text-xs">
+                    <label className="block font-semibold text-[#18181B]">
+                      Registered Email ID
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="email"
+                        disabled
+                        value={user.email}
+                        className="w-full bg-[#F3F2EE] border border-[#E5E4DF] rounded-lg py-2.5 pl-9 pr-3 text-[#52525B] font-mono text-xs cursor-not-allowed"
+                      />
+                      <Mail size={14} className="absolute left-3 top-3 text-[#71717A]" />
+                    </div>
+                  </div>
+
+                  <div className="md:col-span-5 space-y-1 text-xs">
+                    <label className="block font-semibold text-[#18181B]">
+                      Registered Mobile Number (SMS Alerts)
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="tel"
+                        placeholder="+91 98765 43210"
+                        value={phone}
+                        onChange={(e) => setPhone(e.target.value)}
+                        className="w-full bg-[#FAF9F6] border border-[#D6D5CE] rounded-lg py-2.5 pl-9 pr-3 text-[#18181B] font-mono text-xs focus:bg-white focus:border-[#65A30D] focus:outline-none"
+                      />
+                      <Phone size={14} className="absolute left-3 top-3 text-[#71717A]" />
+                    </div>
+                  </div>
+
+                  <div className="md:col-span-2">
+                    <button
+                      type="submit"
+                      className="w-full py-2.5 px-4 bg-[#B8F130] hover:bg-[#AAE422] text-[#111111] font-space font-bold text-xs rounded-lg transition-colors cursor-pointer whitespace-nowrap"
+                    >
+                      Save Number
+                    </button>
+                  </div>
+
+                  {profileMessage && (
+                    <div className="md:col-span-12 text-xs font-medium text-[#166534] flex items-center gap-1.5">
+                      <CheckCircle2 size={14} className="text-[#16A34A]" />
+                      <span>{profileMessage}</span>
+                    </div>
+                  )}
+                </form>
+
+                {/* Alert Toggles */}
+                <div className="space-y-4">
+                  <h4 className="font-space font-semibold text-sm text-[#18181B]">
+                    Alert Preferences
+                  </h4>
+                  <div className="divide-y divide-[#E5E4DF] text-xs">
+                    {(
+                      [
+                        {
+                          key: 'email_enabled',
+                          label: 'Email Notifications',
+                          desc: `Send alerts to ${user.email}`,
+                        },
+                        {
+                          key: 'sms_enabled',
+                          label: 'Mobile SMS Notifications',
+                          desc: user.phone
+                            ? `Send SMS alerts to ${user.phone}`
+                            : 'Save your mobile number above to receive SMS messages',
+                        },
+                        {
+                          key: 'notify_cart',
+                          label: 'Shopping Bag Additions',
+                          desc: 'Notify me when an item is added to my shopping bag',
+                        },
+                        {
+                          key: 'notify_wishlist',
+                          label: 'Wishlist Saves',
+                          desc: 'Notify me when a style is saved to my wishlist',
+                        },
+                        {
+                          key: 'notify_orders',
+                          label: 'Order Confirmation & Tracking',
+                          desc: 'Notify me when an order is placed, shipped, or delivered',
+                        },
+                      ] as const
+                    ).map((row) => {
+                      const checked = preferences[row.key];
+                      return (
+                        <div
+                          key={row.key}
+                          className="py-3 flex items-center justify-between gap-4"
+                        >
+                          <div>
+                            <p className="font-semibold text-[#18181B]">{row.label}</p>
+                            <p className="text-[#64748B] mt-0.5">{row.desc}</p>
+                          </div>
+                          <button
+                            type="button"
+                            role="switch"
+                            aria-checked={checked}
+                            onClick={() => updatePreferences({ [row.key]: !checked })}
+                            className={`relative inline-flex h-6 w-11 shrink-0 rounded-full transition-colors cursor-pointer ${
+                              checked ? 'bg-[#65A30D]' : 'bg-[#D6D5CE]'
+                            }`}
+                          >
+                            <span
+                              className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-xs transition-transform mt-0.5 ${
+                                checked ? 'translate-x-5.5' : 'translate-x-0.5'
+                              }`}
+                            />
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Recent Notification History */}
+                <div className="space-y-3 pt-2 border-t border-[#E5E4DF]">
+                  <h4 className="font-space font-semibold text-sm text-[#18181B]">
+                    Recent Sent Alerts ({notifications.length})
+                  </h4>
+
+                  {notifications.length === 0 ? (
+                    <p className="text-xs text-[#64748B] py-6">
+                      No notifications yet. Add a product to your bag, save an item to your
+                      wishlist, or place an order to receive your first alert.
+                    </p>
+                  ) : (
+                    <div className="divide-y divide-[#E5E4DF]">
+                      {notifications.map((ntf) => (
+                        <div key={ntf.id} className="py-4 space-y-1.5 text-xs">
+                          <div className="flex flex-wrap items-baseline justify-between gap-2">
+                            <p className="font-space font-semibold text-sm text-[#18181B]">
+                              {ntf.title}
+                            </p>
+                            <span className="text-[11px] text-[#71717A] font-mono tabular-nums">
+                              {new Date(ntf.created_at).toLocaleString('en-IN', {
+                                day: 'numeric',
+                                month: 'short',
+                                hour: '2-digit',
+                                minute: '2-digit',
+                              })}
+                            </span>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-2 text-[11px] text-[#52525B]">
+                            <span>Email: {ntf.recipient_email}</span>
+                            {ntf.recipient_phone && (
+                              <>
+                                <span aria-hidden="true">·</span>
+                                <span>Mobile: {ntf.recipient_phone}</span>
+                              </>
+                            )}
+                          </div>
+                          <p className="text-[#3F3F46] leading-relaxed whitespace-pre-line pt-1">
+                            {ntf.email_body_text}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </motion.div>
             )}
           </AnimatePresence>

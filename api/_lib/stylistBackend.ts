@@ -1099,7 +1099,7 @@ async function analyzeGarmentImageWithVision(
         },
       ],
     },
-    'You are a precision computer-vision fashion attribute extractor for Form & Fit. Report ONLY what is visually present on the main garment itself. Never confuse background colors with garment colors. Distinguish plain/solid vs stripes vs checks/plaid vs floral vs graphic print accurately. If no clothing, footwear, or fashion accessory is visible at all, set isClothingDetected to false.',
+    'You are a precision computer-vision fashion attribute extractor for PatanaKart. Report ONLY what is visually present on the main garment itself. Never confuse background colors with garment colors. Distinguish plain/solid vs stripes vs checks/plaid vs floral vs graphic print accurately. If no clothing, footwear, or fashion accessory is visible at all, set isClothingDetected to false.',
     VISION_GARMENT_SCHEMA,
     0.1
   );
@@ -1556,7 +1556,7 @@ function buildCandidateExplanation(
   if (uniqueMatches.length > 0 && conflictTraits.length > 0) {
     return `Shares the ${uniqueMatches[0]}, offered in ${candColor} (${candPattern}).`;
   }
-  return `Available Form & Fit ${candType.toLowerCase()} in ${candColor} (${candPattern}).`;
+  return `Available PatanaKart ${candType.toLowerCase()} in ${candColor} (${candPattern}).`;
 }
 
 function tokenizeWords(text: string): string[] {
@@ -1634,7 +1634,7 @@ STRICT RULES:
   const verified = await generateStructuredJsonWithFailover(
     ai,
     { parts },
-    'You are a strict visual product matching judge for Form & Fit. Penalize conflicting colors and conflicting patterns heavily. Never claim a match is exact without strong visual proof.',
+    'You are a strict visual product matching judge for PatanaKart. Penalize conflicting colors and conflicting patterns heavily. Never claim a match is exact without strong visual proof.',
     {
       type: Type.OBJECT,
       properties: {
@@ -1821,7 +1821,7 @@ function buildCoordinatedOutfitFromCatalog(
       unitPrice: primary.effectivePrice,
       inStock: primary.inStock,
       availableSizes: primary.availableSizes,
-      stylingNote: `Anchor ${primary.product.category?.name?.toLowerCase() || 'piece'} from the live Form & Fit catalog.`,
+      stylingNote: `Anchor ${primary.product.category?.name?.toLowerCase() || 'piece'} from the live PatanaKart catalog.`,
     });
 
     const desiredRoles: Array<EnrichedCatalogItem['broadRole']> =
@@ -1884,17 +1884,17 @@ function buildCoordinatedOutfitFromCatalog(
 
   const missingCategoryNote =
     missingLabels.length > 0
-      ? `Showing live published pieces currently available in Form & Fit. Pair with neutral ${missingLabels.join(' and ')} to complete the head-to-toe look.`
+      ? `Showing live published pieces currently available in PatanaKart. Pair with neutral ${missingLabels.join(' and ')} to complete the head-to-toe look.`
       : undefined;
 
   return {
-    title: aiTitle || `${prefs.style ? capitalizeWords(prefs.style) : 'Signature Form & Fit'} Edit`,
+    title: aiTitle || `${prefs.style ? capitalizeWords(prefs.style) : 'Signature PatanaKart'} Edit`,
     occasion: aiOccasion || (prefs.occasion ? capitalizeWords(prefs.occasion) : 'Everyday & Smart Casual'),
     colorCoordination:
       aiColorCoordination || 'Balanced tones with crisp contrast for effortless wearability.',
     stylingSummary:
       aiStylingSummary ||
-      'Curated exclusively from live Form & Fit catalog pieces with real-time pricing and stock availability.',
+      'Curated exclusively from live PatanaKart catalog pieces with real-time pricing and stock availability.',
     pieces: chosenPieces,
     totalPrice,
     regularTotalPrice,
@@ -2076,7 +2076,7 @@ export async function handleStylistApi(req: any, res: any) {
       if (catalog.length === 0 || inStockCount === 0) {
         return res.status(200).json({
           success: true,
-          reply: `Detected: ${analysis.summary}. There are currently no in-stock published products in the Form & Fit catalog to match against.`,
+          reply: `Detected: ${analysis.summary}. There are currently no in-stock published products in the PatanaKart catalog to match against.`,
           preferences: currentPrefs,
           followUpSuggestions: ['Find my style'],
           visualAnalysis: analysis,
@@ -2189,24 +2189,24 @@ export async function handleStylistApi(req: any, res: any) {
       let lowConfidenceMessage: string | null = null;
 
       if (offset > 0) {
-        reply = `Showing ${pagedRecommendations.length} additional matching ${pagedRecommendations.length === 1 ? 'item' : 'items'} from Form & Fit.`;
+        reply = `Showing ${pagedRecommendations.length} additional matching ${pagedRecommendations.length === 1 ? 'item' : 'items'} from PatanaKart.`;
       } else if (hasExactMatch) {
-        reply = `${detectedIntro} Found ${strongMatches.length === 1 ? 'a direct visual match' : `${strongMatches.length} close visual matches`} in the Form & Fit catalog.`;
+        reply = `${detectedIntro} Found ${strongMatches.length === 1 ? 'a direct visual match' : `${strongMatches.length} close visual matches`} in the PatanaKart catalog.`;
       } else if (hasStrongVisualMatch) {
         lowConfidenceMessage =
-          "I couldn't find an exact match in Form & Fit. Here are the closest styles available.";
-        reply = `${detectedIntro} I couldn't find an identical piece, so here ${strongMatches.length === 1 ? 'is the closest visual match' : 'are the closest visual matches'} available in Form & Fit.`;
+          "I couldn't find an exact match in PatanaKart. Here are the closest styles available.";
+        reply = `${detectedIntro} I couldn't find an identical piece, so here ${strongMatches.length === 1 ? 'is the closest visual match' : 'are the closest visual matches'} available in PatanaKart.`;
       } else {
         lowConfidenceMessage =
-          "I couldn't find an exact match in Form & Fit. Here are the closest styles available.";
+          "I couldn't find an exact match in PatanaKart. Here are the closest styles available.";
         if (
           lowConfidenceClosest.length === 0 &&
           sameCatDiffColorRecs.length === 0 &&
           similarPatternRecs.length === 0
         ) {
-          reply = `${detectedIntro} Form & Fit doesn't currently have a matching ${analysis.garmentType.toLowerCase()} in stock, so I haven't shown unrelated catalog items.`;
+          reply = `${detectedIntro} PatanaKart doesn't currently have a matching ${analysis.garmentType.toLowerCase()} in stock, so I haven't shown unrelated catalog items.`;
         } else {
-          reply = `${detectedIntro} I couldn't find a close visual match with both the same color and pattern in Form & Fit right now. Choose an option below if you'd like to explore available ${analysis.garmentType.toLowerCase()} styles in another color or pattern.`;
+          reply = `${detectedIntro} I couldn't find a close visual match with both the same color and pattern in PatanaKart right now. Choose an option below if you'd like to explore available ${analysis.garmentType.toLowerCase()} styles in another color or pattern.`;
         }
       }
 
@@ -2276,7 +2276,7 @@ export async function handleStylistApi(req: any, res: any) {
       return res.status(200).json({
         success: true,
         reply:
-          "Hi! Our Form & Fit live catalog currently has 0 published products. Once products are published in the Admin Dashboard, I can immediately recommend pieces and build outfits from real inventory!",
+          "Hi! Our PatanaKart live catalog currently has 0 published products. Once products are published in the Admin Dashboard, I can immediately recommend pieces and build outfits from real inventory!",
         preferences: heuristicPrefs,
         followUpSuggestions: ['Find my style', 'Find a product from a photo'],
         recommendations: [],
@@ -2320,20 +2320,20 @@ ${conversationTranscript || '(Start of conversation)'}
 CURRENT SHOPPER MESSAGE:
 "${userMessage}"
 
-LIVE PUBLISHED FORM & FIT CATALOG (${catalog.length} total published products, ${inStockCount} in stock):
+LIVE PUBLISHED PATANAKART CATALOG (${catalog.length} total published products, ${inStockCount} in stock):
 ${JSON.stringify(catalogDigest, null, 2)}
 
 INSTRUCTIONS:
 1. Update the shopper's session preferences (gender, occasion, style, colors, clothingTypes, budgetInr in Indian Rupees ₹, preferredSize) based on their message merged with existing session preferences.
 2. If key details would meaningfully improve recommendations (such as Men's/Women's/Unisex, occasion, style vibe, or ₹ budget), weave 1 or 2 natural, conversational styling questions into your reply.
-3. Recommend ONLY relevant, in-stock products from LIVE PUBLISHED FORM & FIT CATALOG (respecting gender, color, category, budgetInr, and preferredSize). Do NOT return unrelated products that clash with what the shopper asked for.
-4. NEVER invent productIds, names, prices, discounts, or sizes. ONLY output productIds that exist verbatim in LIVE PUBLISHED FORM & FIT CATALOG.
+3. Recommend ONLY relevant, in-stock products from LIVE PUBLISHED PATANAKART CATALOG (respecting gender, color, category, budgetInr, and preferredSize). Do NOT return unrelated products that clash with what the shopper asked for.
+4. NEVER invent productIds, names, prices, discounts, or sizes. ONLY output productIds that exist verbatim in LIVE PUBLISHED PATANAKART CATALOG.
 5. Set includeOutfit = true whenever the shopper asks to style an outfit, build a look, coordinate colors, dress for an occasion, or build an outfit under a budget.`;
 
     const parsedChat = await generateStructuredJsonWithFailover(
       ai,
       chatPrompt,
-      'You are the Form & Fit Personal Fashion Stylist—warm, tasteful, knowledgeable about Indian & contemporary fashion, and 100% honest about real catalog availability. Keep replies concise (2-4 sentences) and accurate to visualPrimaryColor and visualPattern.',
+      'You are the PatanaKart Personal Fashion Stylist—warm, tasteful, knowledgeable about Indian & contemporary fashion, and 100% honest about real catalog availability. Keep replies concise (2-4 sentences) and accurate to visualPrimaryColor and visualPattern.',
       {
         type: Type.OBJECT,
         properties: {
@@ -2439,7 +2439,7 @@ INSTRUCTIONS:
           matchScore: Math.max(10, Math.min(99, Number(rec.score || 85))),
           matchReason:
             String(rec.matchReason || '').trim() ||
-            `Selected from Form & Fit's ${item.product.category?.name || item.product.gender_collection} collection.`,
+            `Selected from PatanaKart's ${item.product.category?.name || item.product.gender_collection} collection.`,
           inStock: item.inStock,
           totalStock: item.totalStock,
           effectivePrice: item.effectivePrice,
@@ -2477,7 +2477,7 @@ INSTRUCTIONS:
       success: true,
       reply:
         String(parsedChat.reply || '').trim() ||
-        'Here are curated options from our live Form & Fit catalog.',
+        'Here are curated options from our live PatanaKart catalog.',
       preferences: mergedPrefs,
       followUpSuggestions: followUps,
       recommendations: recommendations.slice(0, 6),
@@ -2488,7 +2488,7 @@ INSTRUCTIONS:
       },
     } satisfies StylistApiResponse);
   } catch (err: any) {
-    console.error('[Form & Fit AI Stylist Error]:', err);
+    console.error('[PatanaKart AI Stylist Error]:', err);
     const status = Number(err?.status || err?.code || 500);
     const rawMsg = String(err?.message || '');
 

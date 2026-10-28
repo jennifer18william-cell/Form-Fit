@@ -222,3 +222,59 @@ export interface ContactMessage {
   status: 'unread' | 'read' | 'archived';
   created_at: string;
 }
+
+export type NotificationEventType =
+  | 'cart_added'
+  | 'wishlist_added'
+  | 'order_placed'
+  | 'order_status_updated';
+
+export type ChannelDeliveryStatus = 'sent' | 'logged' | 'skipped' | 'failed';
+
+export interface CustomerNotificationPreferences {
+  email_enabled: boolean;
+  sms_enabled: boolean;
+  notify_cart: boolean;
+  notify_wishlist: boolean;
+  notify_orders: boolean;
+}
+
+export interface CustomerNotification {
+  id: string;
+  user_id?: string;
+  recipient_email: string;
+  recipient_phone?: string;
+  event_type: NotificationEventType;
+  title: string;
+  subject: string;
+  email_body_text: string;
+  sms_body: string;
+  action_url?: string;
+  metadata?: {
+    product_name?: string;
+    product_image?: string;
+    price?: number;
+    size?: string;
+    color?: string;
+    quantity?: number;
+    order_number?: string;
+    order_status?: string;
+    tracking_number?: string;
+    item_count?: number;
+  };
+  channels: {
+    email: {
+      status: ChannelDeliveryStatus;
+      provider?: string;
+      detail?: string;
+    };
+    sms: {
+      status: ChannelDeliveryStatus;
+      provider?: string;
+      detail?: string;
+    };
+  };
+  is_read: boolean;
+  created_at: string;
+}
+

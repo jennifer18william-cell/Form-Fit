@@ -203,7 +203,8 @@ export const Home: React.FC = () => {
 
   const hasCustomHeadline =
     Boolean(storeSettings.hero_headline) &&
-    storeSettings.hero_headline.trim().toUpperCase() !== 'FIND YOUR FIT. DEFINE YOUR FORM.';
+    storeSettings.hero_headline.trim().toUpperCase() !== 'FIND YOUR FIT. DEFINE YOUR FORM.' &&
+    storeSettings.hero_headline.trim().toUpperCase() !== 'FASHION FOR EVERY YOU.';
 
   return (
     <div className="space-y-16 sm:space-y-20 pb-20 font-sans text-[#18181B]">
@@ -225,14 +226,14 @@ export const Home: React.FC = () => {
             {storeSettings.hero_image_url ? (
               <img
                 src={storeSettings.hero_image_url}
-                alt="Form & Fit Editorial Campaign"
+                alt="PatanaKart Editorial Campaign"
                 referrerPolicy="no-referrer"
                 className="w-full h-full object-cover object-top"
               />
             ) : (
               <img
                 src={EDITORIAL_HERO_ASSET}
-                alt="Form & Fit 2026 Editorial Studio Campaign"
+                alt="PatanaKart 2026 Editorial Studio Campaign"
                 className="absolute max-w-none w-[184.57%] h-[122.29%] -left-[84.57%] -top-[22.29%]"
               />
             )}
@@ -259,10 +260,10 @@ export const Home: React.FC = () => {
             ) : (
               <h1 className="font-space font-extrabold text-4xl sm:text-5xl xl:text-[4.1rem] tracking-tight leading-[1.04] uppercase text-[#0F0F10]">
                 <span className="block whitespace-nowrap">
-                  FIND YOUR <span className="text-[#9ED912]">FIT</span>.
+                  FASHION <span className="text-[#9ED912]">FOR</span>
                 </span>
                 <span className="block whitespace-nowrap">
-                  DEFINE YOUR <span className="text-[#9ED912]">FORM</span>.
+                  EVERY <span className="text-[#9ED912]">YOU</span>.
                 </span>
               </h1>
             )}
@@ -278,14 +279,14 @@ export const Home: React.FC = () => {
               {storeSettings.hero_image_url ? (
                 <img
                   src={storeSettings.hero_image_url}
-                  alt="Form & Fit Editorial Campaign"
+                  alt="PatanaKart Editorial Campaign"
                   referrerPolicy="no-referrer"
                   className="w-full h-full object-cover object-top"
                 />
               ) : (
                 <img
                   src={EDITORIAL_HERO_ASSET}
-                  alt="Form & Fit 2026 Editorial Studio Campaign"
+                  alt="PatanaKart 2026 Editorial Studio Campaign"
                   className="absolute max-w-none w-[184.57%] h-[122.29%] -left-[84.57%] -top-[22.29%]"
                 />
               )}

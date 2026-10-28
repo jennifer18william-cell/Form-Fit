@@ -15,6 +15,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { optimizeImage } from '../lib/imageOptimization';
+import { BrandLogo } from './BrandLogo';
 import {
   StylistApiRequest,
   StylistApiResponse,
@@ -53,7 +54,7 @@ interface ChatMessageItem {
   timestamp: number;
 }
 
-const WELCOME_MESSAGE = "Hi! I'm your Form & Fit stylist. Let's find your perfect look.";
+const WELCOME_MESSAGE = "Hi! I'm your PatanaKart stylist. Let's find your perfect look.";
 
 const QUICK_ACTIONS: Array<{
   id: string;
@@ -65,13 +66,13 @@ const QUICK_ACTIONS: Array<{
   {
     id: 'find-style',
     label: 'Find my style',
-    prompt: 'Help me find my personal fashion style from the Form & Fit collection.',
+    prompt: 'Help me find my personal fashion style from the PatanaKart collection.',
     mode: 'chat',
   },
   {
     id: 'style-outfit',
     label: 'Style an outfit',
-    prompt: 'Style a complete coordinated outfit for me from Form & Fit.',
+    prompt: 'Style a complete coordinated outfit for me from PatanaKart.',
     mode: 'outfit_builder',
   },
   {
@@ -94,12 +95,12 @@ const QUICK_ACTIONS: Array<{
   {
     id: 'accessories',
     label: 'Find matching accessories',
-    prompt: 'Show me matching accessories and footwear available in Form & Fit.',
+    prompt: 'Show me matching accessories and footwear available in PatanaKart.',
     mode: 'chat',
   },
 ];
 
-const SESSION_STORAGE_KEY = 'formfit_ai_stylist_session_v1';
+const SESSION_STORAGE_KEY = 'patanakart_ai_stylist_session_v1';
 const ALLOWED_CLIENT_MIMES = new Set([
   'image/jpeg',
   'image/jpg',
@@ -435,7 +436,7 @@ export const AiFashionStylist: React.FC = () => {
     setRetryPayload(null);
 
     const displayUserText =
-      textToSend || (imageToSend ? 'Find this style in Form & Fit' : '');
+      textToSend || (imageToSend ? 'Find this style in PatanaKart' : '');
 
     // Append user turn unless retrying an already-added user message
     if (!opts?.isRetry) {
@@ -458,7 +459,7 @@ export const AiFashionStylist: React.FC = () => {
         ? 'Analyzing garment cut, colors, fabric & matching live catalog...'
         : requestMode === 'outfit_builder'
         ? 'Coordinating complete outfit & calculating live catalog prices...'
-        : 'Checking live Form & Fit catalog for your preferences...'
+        : 'Checking live PatanaKart catalog for your preferences...'
     );
 
     const historyPayload: StylistHistoryTurn[] = messages
@@ -498,7 +499,7 @@ export const AiFashionStylist: React.FC = () => {
 
       if (!response.ok || !data.success) {
         setApiError(
-          data.error || 'Could not reach the Form & Fit stylist right now. Please retry.'
+          data.error || 'Could not reach the PatanaKart stylist right now. Please retry.'
         );
         setRetryPayload({
           text: textToSend,
@@ -649,15 +650,15 @@ export const AiFashionStylist: React.FC = () => {
             exit={{ opacity: 0, scale: 0.9, y: 12 }}
             transition={{ duration: 0.2 }}
             onClick={() => setIsOpen(true)}
-            aria-label="Open Form & Fit AI Fashion Stylist"
-            className="fixed bottom-20 md:bottom-6 right-4 md:right-6 z-40 group flex items-center gap-2.5 rounded-full bg-[#18181B] pl-3.5 pr-4 py-3 text-white shadow-[0_12px_32px_rgba(24,24,27,0.22)] border border-[#27272A] hover:bg-[#27272A] transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#65A30D] focus-visible:ring-offset-2"
+            aria-label="Open PatanaKart AI Fashion Stylist"
+            className="fixed bottom-20 md:bottom-6 right-4 md:right-6 z-40 group flex items-center gap-2.5 rounded-full bg-[#18181B] pl-3 pr-4 py-2.5 text-white shadow-[0_12px_32px_rgba(24,24,27,0.22)] border border-[#27272A] hover:bg-[#27272A] transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#65A30D] focus-visible:ring-offset-2"
           >
-            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#B8F130] text-[#111111] transition-transform duration-200 group-hover:scale-105">
-              <Shirt size={16} strokeWidth={2.2} />
+            <span className="transition-transform duration-200 group-hover:scale-105">
+              <BrandLogo variant="badge" size="sm" />
             </span>
             <span className="text-left leading-tight">
               <span className="block font-space text-xs font-bold tracking-tight text-white">
-                AI Stylist
+                PatanaKart Stylist
               </span>
               <span className="block text-[10px] text-[#A1A1AA]">
                 Style &amp; Photo Match
@@ -672,7 +673,7 @@ export const AiFashionStylist: React.FC = () => {
         {isOpen && (
           <motion.section
             role="dialog"
-            aria-label="Form & Fit AI Fashion Stylist"
+            aria-label="PatanaKart AI Fashion Stylist"
             initial={{ opacity: 0, y: 20, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 20, scale: 0.98 }}
@@ -701,12 +702,10 @@ export const AiFashionStylist: React.FC = () => {
             <header className="shrink-0 bg-white border-b border-[#E5E4DF] px-4 py-3">
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#B8F130] text-[#111111]">
-                    <Shirt size={18} strokeWidth={2.2} />
-                  </div>
+                  <BrandLogo variant="badge" size="sm" />
                   <div className="min-w-0">
                     <h2 className="font-space text-sm font-bold text-[#18181B] truncate">
-                      Form &amp; Fit Personal Stylist
+                      PatanaKart Personal Stylist
                     </h2>
                     <p className="text-[11px] text-[#64748B] truncate">
                       Live catalog styling · Visual photo search

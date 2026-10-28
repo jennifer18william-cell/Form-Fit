@@ -592,7 +592,7 @@ export const ProductDetail: React.FC = () => {
         )}
 
         <div className="text-xs text-[#64748B] font-sans">
-          No reviews yet. Be the first to share your Form &amp; Fit experience.
+          No reviews yet. Be the first to share your PatanaKart experience.
         </div>
       </div>
 

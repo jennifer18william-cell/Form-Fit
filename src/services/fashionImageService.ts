@@ -27,7 +27,7 @@ const CATEGORY_FALLBACK_PHOTOS: Record<string, FashionPhoto[]> = {
       id: 'fw-1',
       url: footwearStudioImg,
       alt: 'Minimalist Leather Court Sneakers Studio Poster',
-      photographer: 'Form & Fit Studio',
+      photographer: 'PatanaKart Studio',
     },
   ],
   'mens-footwear': [
@@ -35,7 +35,7 @@ const CATEGORY_FALLBACK_PHOTOS: Record<string, FashionPhoto[]> = {
       id: 'fw-men-1',
       url: mensFootwearStudioImg,
       alt: "Men's Suede Loafers & Leather Sneakers Studio Poster",
-      photographer: 'Form & Fit Studio',
+      photographer: 'PatanaKart Studio',
     },
   ],
   'womens-footwear': [
@@ -43,7 +43,7 @@ const CATEGORY_FALLBACK_PHOTOS: Record<string, FashionPhoto[]> = {
       id: 'fw-women-1',
       url: womensFootwearStudioImg,
       alt: "Women's Sculpted Leather Sneakers & Cognac Loafers Studio Poster",
-      photographer: 'Form & Fit Studio',
+      photographer: 'PatanaKart Studio',
     },
   ],
   accessories: [
@@ -51,7 +51,7 @@ const CATEGORY_FALLBACK_PHOTOS: Record<string, FashionPhoto[]> = {
       id: 'acc-1',
       url: accessoriesStudioImg,
       alt: 'Structured Leather Tote & Lifestyle Accessories Studio Poster',
-      photographer: 'Form & Fit Studio',
+      photographer: 'PatanaKart Studio',
     },
   ],
   'mens-fashion': [

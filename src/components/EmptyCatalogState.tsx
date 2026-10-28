@@ -1,7 +1,8 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { ShoppingBag, PlusCircle, ShieldCheck } from 'lucide-react';
+import { PlusCircle, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { BrandLogo } from './BrandLogo';
 
 interface EmptyCatalogStateProps {
   title?: string;
@@ -16,12 +17,12 @@ export const EmptyCatalogState: React.FC<EmptyCatalogStateProps> = ({
 
   return (
     <div className="max-w-3xl mx-auto my-8 p-8 sm:p-12 bg-white border border-[#E5E4DF] rounded-xl text-center shadow-xs">
-      <div className="w-14 h-14 mx-auto mb-4 bg-[#B8F130]/35 border border-[#9ED912]/40 text-[#111111] flex items-center justify-center rounded-xl">
-        <ShoppingBag size={24} />
+      <div className="mb-4 flex justify-center">
+        <BrandLogo variant="badge" size="md" />
       </div>
 
       <span className="font-space font-bold tracking-wider text-xs uppercase text-[#65A30D] block mb-1">
-        Form &amp; Fit Storefront
+        PatanaKart Storefront
       </span>
 
       <h3 className="font-space font-bold text-2xl tracking-tight text-[#111111] mb-2.5">

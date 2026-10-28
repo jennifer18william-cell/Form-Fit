@@ -1,14 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { BrandLogo } from '../../components/BrandLogo';
 import { motion } from 'motion/react';
-import { ShieldCheck, KeyRound, Eye, EyeOff, ArrowRight, Mail, AlertCircle } from 'lucide-react';
+import { KeyRound, Eye, EyeOff, ArrowRight, Mail, AlertCircle } from 'lucide-react';
 
 export const OwnerLogin: React.FC = () => {
   const { authenticateOwner, isOwner } = useAuth();
   const navigate = useNavigate();
 
-  const [email, setEmail] = useState('admin@formandfit.in');
+  const [email, setEmail] = useState('admin@patanakart.in');
   const [passcode, setPasscode] = useState('');
   const [showPasscode, setShowPasscode] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -49,11 +50,11 @@ export const OwnerLogin: React.FC = () => {
         className="max-w-md w-full bg-white border border-[#E5E4DF] rounded-2xl p-8 shadow-sm space-y-6 relative overflow-hidden"
       >
         <div className="text-center space-y-2">
-          <div className="w-14 h-14 mx-auto rounded-xl bg-[#F4FBE1] border border-[#BEF264] text-[#3F6212] flex items-center justify-center">
-            <ShieldCheck size={28} />
+          <div className="flex justify-center pb-1">
+            <BrandLogo variant="badge" size="lg" />
           </div>
           <p className="text-xs font-medium text-[#64748B]">
-            Form &amp; Fit Store Portal
+            PatanaKart Store Portal
           </p>
           <h1 className="font-space font-bold text-2xl tracking-tight text-[#18181B]">
             Admin Sign In
@@ -79,7 +80,7 @@ export const OwnerLogin: React.FC = () => {
               <input
                 type="email"
                 required
-                placeholder="admin@formandfit.in"
+                placeholder="admin@patanakart.in"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="w-full bg-[#FAF9F6] border border-[#D6D5CE] rounded-lg px-3 py-2.5 pl-9 text-sm text-[#18181B] focus:bg-white focus:border-[#65A30D] focus:ring-2 focus:ring-[#65A30D]/15 focus:outline-none transition-colors"
@@ -130,10 +131,10 @@ export const OwnerLogin: React.FC = () => {
 
         <div className="pt-4 border-t border-[#E5E4DF] text-center">
           <Link
-            to="/"
+            to="/login"
             className="text-xs font-medium text-[#52525B] hover:text-[#4D7C0F] transition-colors inline-block"
           >
-            ← Return to Customer Storefront
+            ← Back to Customer Sign In / Sign Up Portal
           </Link>
         </div>
       </motion.div>

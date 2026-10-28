@@ -12,6 +12,7 @@ import {
   handleStoreApi,
 } from './api/_lib/catalogBackend';
 import { handleStylistApi } from './api/_lib/stylistBackend';
+import { handleNotificationsApi } from './api/_lib/notificationBackend';
 
 dotenv.config();
 
@@ -91,13 +92,14 @@ async function startServer() {
 
   app.use(express.json({ limit: '15mb' }));
 
-  // Shared Catalog, Auth, Store & Product Photography API Routes (Parity with Vercel /api/*)
+  // Shared Catalog, Auth, Store, Notifications & Product Photography API Routes (Parity with Vercel /api/*)
   app.all('/api/products', (req, res) => handleProductsApi(req, res));
   app.all('/api/categories', (req, res) => handleCategoriesApi(req, res));
   app.post('/api/upload-image', (req, res) => handleUploadImageApi(req, res));
   app.post('/api/auth', (req, res) => handleAuthApi(req, res));
   app.all('/api/store', (req, res) => handleStoreApi(req, res));
   app.all('/api/stylist', (req, res) => handleStylistApi(req, res));
+  app.all('/api/notifications', (req, res) => handleNotificationsApi(req, res));
 
   // API Endpoint: Pexels Fashion Photography Proxy
   app.get('/api/pexels-fashion', async (req, res) => {
@@ -155,7 +157,7 @@ async function startServer() {
         id: String(p.id),
         url: p.src.large || p.src.medium,
         originalUrl: p.src.original,
-        alt: p.alt || 'Form & Fit Fashion Photography',
+        alt: p.alt || 'PatanaKart Fashion Photography',
         photographer: p.photographer,
         photographerUrl: p.photographer_url,
       }));
@@ -204,7 +206,7 @@ async function startServer() {
   }
 
   app.listen(Number(PORT), '0.0.0.0', () => {
-    console.log(`Form & Fit full-stack server running at http://0.0.0.0:${PORT}`);
+    console.log(`PatanaKart full-stack server running at http://0.0.0.0:${PORT}`);
   });
 }
 

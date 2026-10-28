@@ -478,7 +478,7 @@ export const Shop: React.FC = () => {
       <div className="border-b border-[#E5E4DF] pb-6 flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
           <span className="text-xs font-space font-bold uppercase tracking-wider text-[#4D7C0F]">
-            {isFootwearZone ? 'Form & Fit · Footwear Zone' : 'Form & Fit Collection'}
+            {isFootwearZone ? 'PatanaKart · Footwear Zone' : 'PatanaKart Collection'}
           </span>
           <h1 className="font-space font-bold text-3xl tracking-tight text-[#18181B] mt-0.5 [text-wrap:balance]">
             {pageHeading}

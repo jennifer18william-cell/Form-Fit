@@ -1,20 +1,24 @@
 import React, { useState } from 'react';
 import { useStore } from '../context/StoreContext';
+import { BrandLogo } from '../components/BrandLogo';
 import { Mail, Phone, MapPin, CheckCircle2 } from 'lucide-react';
 
 export const AboutPage: React.FC = () => (
   <div className="max-w-4xl mx-auto px-4 py-12 space-y-8 font-sans text-[#18181B]">
-    <div className="border-b border-[#E5E4DF] pb-4">
-      <span className="text-xs font-space font-semibold uppercase tracking-wider text-[#4D7C0F]">
-        Brand Heritage
-      </span>
-      <h1 className="font-space font-bold text-3xl tracking-tight text-[#18181B] mt-0.5">
-        About Form &amp; Fit
-      </h1>
+    <div className="border-b border-[#E5E4DF] pb-4 flex items-center gap-4">
+      <BrandLogo variant="badge" size="md" />
+      <div>
+        <span className="text-xs font-space font-semibold uppercase tracking-wider text-[#4D7C0F]">
+          Brand Heritage
+        </span>
+        <h1 className="font-space font-bold text-3xl tracking-tight text-[#18181B] mt-0.5">
+          About PatanaKart
+        </h1>
+      </div>
     </div>
     <div className="bg-white border border-[#E5E4DF] rounded-xl p-8 space-y-4 text-sm text-[#52525B] leading-relaxed">
       <p className="text-base font-space font-semibold text-[#18181B]">
-        Form &amp; Fit was founded on a simple principle: clothing should adapt to your body and lifestyle, not the other way around.
+        PatanaKart was founded on a simple principle: clothing should adapt to your body and lifestyle, not the other way around.
       </p>
       <p>
         As an independent, owner-managed Indian fashion brand, we bridge the gap between structured contemporary tailoring, heavyweight streetwear cottons, and interactive custom apparel.
@@ -58,7 +62,7 @@ export const ContactPage: React.FC = () => {
           Customer Support
         </span>
         <h1 className="font-space font-bold text-3xl tracking-tight text-[#18181B] mt-0.5">
-          Contact Form &amp; Fit
+          Contact PatanaKart
         </h1>
       </div>
 

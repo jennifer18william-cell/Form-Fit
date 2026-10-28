@@ -109,7 +109,7 @@ export const Checkout: React.FC = () => {
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-8 text-[#18181B]">
       <div className="border-b border-[#E5E4DF] pb-4">
         <span className="text-xs font-space font-semibold uppercase tracking-wider text-[#4D7C0F]">
-          Form &amp; Fit Checkout
+          PatanaKart Checkout
         </span>
         <h1 className="font-space font-bold text-3xl tracking-tight text-[#18181B] mt-0.5">
           Express Checkout

@@ -157,7 +157,7 @@ export const CustomStudio: React.FC = () => {
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-8 text-[#18181B]">
       <div className="border-b border-[#E5E4DF] pb-6">
         <span className="text-xs font-space font-bold uppercase tracking-wider text-[#4D7C0F]">
-          Form &amp; Fit Personalization
+          PatanaKart Personalization
         </span>
         <h1 className="font-space font-bold text-3xl tracking-tight text-[#18181B] mt-0.5">
           Interactive Custom T-Shirt Studio

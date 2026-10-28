@@ -158,6 +158,8 @@ function isApprovedMasterAdminEmail(email: string): boolean {
   if (!clean) return false;
   const customAdminEmail = cleanServerEnvValue(process.env.ADMIN_EMAIL).toLowerCase();
   return (
+    clean === 'admin@patanakart.in' ||
+    clean === 'owner@patanakart.in' ||
     clean === 'admin@formandfit.in' ||
     clean === 'owner@formandfit.in' ||
     (Boolean(customAdminEmail) && clean === customAdminEmail)
@@ -1648,7 +1650,10 @@ export async function handleAuthApi(req: any, res: any) {
     }
 
     const isOwnerEmail =
-      cleanEmail === 'admin@formandfit.in' || cleanEmail === 'owner@formandfit.in';
+      cleanEmail === 'admin@patanakart.in' ||
+      cleanEmail === 'owner@patanakart.in' ||
+      cleanEmail === 'admin@formandfit.in' ||
+      cleanEmail === 'owner@formandfit.in';
     const assignedRole = isOwnerEmail ? 'owner' : 'customer';
 
     if (cfg.hasServiceRole) {
@@ -1880,7 +1885,10 @@ export async function handleAuthApi(req: any, res: any) {
 
     const emailLower = (u.email || '').toLowerCase();
     const isMasterOwner =
-      emailLower === 'admin@formandfit.in' || emailLower === 'owner@formandfit.in';
+      emailLower === 'admin@patanakart.in' ||
+      emailLower === 'owner@patanakart.in' ||
+      emailLower === 'admin@formandfit.in' ||
+      emailLower === 'owner@formandfit.in';
 
     const desiredRole =
       existingProf?.role === 'owner' || existingProf?.role === 'admin'

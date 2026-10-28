@@ -252,7 +252,7 @@ export async function getAdminRequestHeaders(): Promise<Record<string, string>> 
   try {
     if (localStorage.getItem('form_fit_owner_mode') === 'true') {
       const savedUser = localStorage.getItem('form_fit_user_session');
-      let fallbackEmail = 'admin@formandfit.in';
+      let fallbackEmail = 'admin@patanakart.in';
       if (savedUser) {
         const parsedUser = JSON.parse(savedUser);
         if (parsedUser?.email) {

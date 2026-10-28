@@ -78,7 +78,7 @@ export const SupabaseBanner: React.FC = () => {
                   Supabase Integration
                 </h3>
                 <p className="text-xs text-[#64748B]">
-                  Form &amp; Fit Backend Configuration Status
+                  PatanaKart Backend Configuration Status
                 </p>
               </div>
             </div>

@@ -47,6 +47,7 @@ import {
   resolveCategoryForProduct,
 } from '../lib/categoryMapping';
 import { useAuth } from './AuthContext';
+import { useNotifications } from './NotificationContext';
 
 export interface InventoryLog {
   id: string;
@@ -270,7 +271,8 @@ function normalizeClientProduct(
 }
 
 export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { user, isAdmin } = useAuth();
+  const { user, isAdmin, updateProfile } = useAuth();
+  const { dispatchNotification } = useNotifications();
 
   // Never initialize public storefront from stale browser localStorage; always load authoritative shared DB state
   const [products, setProducts] = useState<Product[]>(INITIAL_PRODUCTS);
@@ -387,11 +389,31 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   });
 
+  const normalizeRebrandedSettings = (raw?: Partial<StoreSettings> | null): StoreSettings => {
+    const merged: StoreSettings = { ...DEFAULT_STORE_SETTINGS, ...(raw || {}) };
+    if (!merged.store_name || /^form\s*(&|and)\s*fit$/i.test(merged.store_name.trim())) {
+      merged.store_name = 'PatanaKart';
+    }
+    if (!merged.logo_url) {
+      merged.logo_url = DEFAULT_STORE_SETTINGS.logo_url;
+    }
+    if (!merged.contact_email || merged.contact_email.trim().toLowerCase() === 'support@formandfit.in') {
+      merged.contact_email = 'support@patanakart.in';
+    }
+    if (
+      merged.hero_headline &&
+      merged.hero_headline.trim().toUpperCase() === 'FIND YOUR FIT. DEFINE YOUR FORM.'
+    ) {
+      merged.hero_headline = DEFAULT_STORE_SETTINGS.hero_headline;
+    }
+    return merged;
+  };
+
   const [storeSettings, setStoreSettings] = useState<StoreSettings>(() => {
     const saved = localStorage.getItem('form_fit_store_settings');
     if (!saved) return DEFAULT_STORE_SETTINGS;
     try {
-      return { ...DEFAULT_STORE_SETTINGS, ...JSON.parse(saved) };
+      return normalizeRebrandedSettings(JSON.parse(saved));
     } catch {
       return DEFAULT_STORE_SETTINGS;
     }
@@ -467,7 +489,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             );
           }
           if (json.storeSettings) {
-            setStoreSettings((prev) => ({ ...prev, ...json.storeSettings }));
+            setStoreSettings((prev) => normalizeRebrandedSettings({ ...prev, ...json.storeSettings }));
           }
           if (Array.isArray(json.coupons) && json.coupons.length > 0) {
             setCoupons(json.coupons);
@@ -490,7 +512,9 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           supabase.from('reviews').select('*').order('created_at', { ascending: false }).limit(100),
         ]);
         if (settingsRes.data?.value && typeof settingsRes.data.value === 'object') {
-          setStoreSettings((prev) => ({ ...prev, ...(settingsRes.data!.value as Partial<StoreSettings>) }));
+          setStoreSettings((prev) =>
+            normalizeRebrandedSettings({ ...prev, ...(settingsRes.data!.value as Partial<StoreSettings>) })
+          );
         }
         if (couponsRes.data && couponsRes.data.length > 0) {
           setCoupons(couponsRes.data as Coupon[]);
@@ -1618,6 +1642,24 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
       return [...prev, newItem];
     });
+
+    const unitPrice = customDesign?.total_price
+      ? customDesign.total_price
+      : safeVariant.price_override || safeProduct.sale_price || safeProduct.regular_price;
+
+    if (user?.email) {
+      void dispatchNotification({
+        eventType: 'cart_added',
+        payload: {
+          productName: safeProduct.name,
+          productImage: resolvedImgUrl,
+          price: unitPrice,
+          size: safeVariant.size,
+          color: safeVariant.color,
+          quantity: Math.max(1, quantity),
+        },
+      });
+    }
   };
 
   const updateCartQuantity = (cartItemId: string, quantity: number) => {
@@ -1716,6 +1758,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   // Wishlist operations
   const toggleWishlist = (product: Product) => {
+    const alreadyExists = wishlist.some((w) => w.product_id === product.id);
+
     setWishlist((prev) => {
       const exists = prev.some((w) => w.product_id === product.id);
       if (exists) {
@@ -1730,6 +1774,22 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         return [...prev, newItem];
       }
     });
+
+    if (!alreadyExists && user?.email) {
+      const mainImg = resolvePublicImageUrl(
+        product.images?.find((i) => i.is_main)?.url || product.images?.[0]?.url,
+        product.name,
+        product.category?.name
+      );
+      void dispatchNotification({
+        eventType: 'wishlist_added',
+        payload: {
+          productName: product.name,
+          productImage: mainImg,
+          price: product.sale_price || product.regular_price,
+        },
+      });
+    }
   };
 
   const isInWishlist = (productId: string) => {
@@ -1749,7 +1809,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
 
     const orderId = generateUUID();
-    const orderNumber = `FF-${new Date().getFullYear()}-${Math.floor(100000 + Math.random() * 900000)}`;
+    const orderNumber = `PK-${new Date().getFullYear()}-${Math.floor(100000 + Math.random() * 900000)}`;
 
     let subtotal = 0;
     const orderItemsList = cart.map((item) => {
@@ -1883,6 +1943,29 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       }
     }
 
+    // Save phone number on customer profile if not yet registered
+    if (user && !user.phone && orderData.customerPhone.trim()) {
+      void updateProfile({ phone: orderData.customerPhone.trim() });
+    }
+
+    // Dispatch Order Confirmation notification to registered email & phone number
+    void dispatchNotification({
+      eventType: 'order_placed',
+      recipientEmail: orderData.customerEmail.trim(),
+      recipientPhone: orderData.customerPhone.trim() || user?.phone,
+      customerName: orderData.shippingAddress.full_name || user?.full_name,
+      payload: {
+        orderNumber,
+        totalAmount: finalTotal,
+        paymentMethod: orderData.paymentMethod,
+        itemCount: orderItemsList.reduce((acc, i) => acc + i.quantity, 0),
+        items: orderItemsList,
+        city: [orderData.shippingAddress.city, orderData.shippingAddress.state]
+          .filter(Boolean)
+          .join(', '),
+      },
+    });
+
     broadcastRealtimeSync('orders');
     broadcastRealtimeSync('catalog');
     clearCart();
@@ -1894,6 +1977,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     status: OrderStatus,
     trackingNumber?: string
   ) => {
+    const targetOrder = orders.find((o) => o.id === orderId);
+
     setOrders((prev) =>
       prev.map((o) =>
         o.id === orderId
@@ -1920,6 +2005,23 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           .update({ status, tracking_number: trackingNumber })
           .eq('id', orderId);
       }
+
+      if (targetOrder?.customer_email) {
+        void dispatchNotification({
+          eventType: 'order_status_updated',
+          asAdmin: true,
+          silentToast: true,
+          recipientEmail: targetOrder.customer_email,
+          recipientPhone: targetOrder.customer_phone,
+          customerName: targetOrder.shipping_address?.full_name,
+          payload: {
+            orderNumber: targetOrder.order_number,
+            status,
+            trackingNumber: trackingNumber ?? targetOrder.tracking_number,
+          },
+        });
+      }
+
       broadcastRealtimeSync('orders');
     } catch (err) {
       console.error('Order status update error:', err);

@@ -11,6 +11,7 @@ import {
 interface AuthContextType {
   user: UserProfile | null;
   loading: boolean;
+  initializing: boolean;
   isOwner: boolean;
   isAdmin: boolean;
   login: (email: string, role?: UserRole) => Promise<{ success: boolean; message?: string }>;
@@ -24,6 +25,7 @@ interface AuthContextType {
     email: string,
     password: string
   ) => Promise<{ success: boolean; message?: string }>;
+  resetPassword: (email: string) => Promise<{ success: boolean; message?: string }>;
   authenticateOwner: (
     email: string,
     passcode: string
@@ -49,6 +51,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
 
   const [loading, setLoading] = useState<boolean>(true);
+  const [initializing, setInitializing] = useState<boolean>(true);
 
   const syncServerProfile = useCallback(
     async (
@@ -121,17 +124,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     if (isSupabaseConfigured()) {
-      supabase.auth.getSession().then(async ({ data: { session } }) => {
-        if (session?.user) {
-          await syncServerProfile(session.user.id ? session.access_token : '', {
-            id: session.user.id,
-            email: session.user.email || '',
-            full_name: session.user.user_metadata?.full_name,
-            phone: session.user.user_metadata?.phone,
-          });
-        }
-        setLoading(false);
-      });
+      supabase.auth
+        .getSession()
+        .then(async ({ data: { session } }) => {
+          if (session?.user) {
+            await syncServerProfile(session.user.id ? session.access_token : '', {
+              id: session.user.id,
+              email: session.user.email || '',
+              full_name: session.user.user_metadata?.full_name,
+              phone: session.user.user_metadata?.phone,
+            });
+          } else if (!localStorage.getItem('form_fit_owner_mode')) {
+            setUser(null);
+            localStorage.removeItem('form_fit_user_session');
+          }
+        })
+        .catch(() => {
+          // Keep existing cached session if offline
+        })
+        .finally(() => {
+          setLoading(false);
+          setInitializing(false);
+        });
 
       const {
         data: { subscription },
@@ -142,19 +156,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             email: session.user.email || '',
             full_name: session.user.user_metadata?.full_name,
             phone: session.user.user_metadata?.phone,
-          }).finally(() => setLoading(false));
+          }).finally(() => {
+            setLoading(false);
+            setInitializing(false);
+          });
         } else {
           if (!localStorage.getItem('form_fit_owner_mode')) {
             setUser(null);
             localStorage.removeItem('form_fit_user_session');
           }
           setLoading(false);
+          setInitializing(false);
         }
       });
 
       return () => subscription.unsubscribe();
     } else {
       setLoading(false);
+      setInitializing(false);
     }
   }, [syncServerProfile]);
 
@@ -198,7 +217,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               setLoading(false);
               return {
                 success: true,
-                message: 'Account registered & signed in! Welcome to Form & Fit.',
+                message: 'Account registered & signed in! Welcome to PatanaKart.',
               };
             }
           }
@@ -217,7 +236,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             setLoading(false);
             return {
               success: true,
-              message: 'Account registered successfully! Welcome to Form & Fit.',
+              message: 'Account registered successfully! Welcome to PatanaKart.',
             };
           }
         }
@@ -257,7 +276,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
 
         setLoading(false);
-        return { success: true, message: 'Account registered successfully! Welcome to Form & Fit.' };
+        return { success: true, message: 'Account registered successfully! Welcome to PatanaKart.' };
       }
 
       const localProfile: UserProfile = {
@@ -289,7 +308,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         });
         if (error) {
           setLoading(false);
-          return { success: false, message: error.message };
+          const rawMsg = error.message || '';
+          if (/invalid login credentials/i.test(rawMsg)) {
+            return {
+              success: false,
+              message:
+                'Incorrect email or password. Please verify your credentials or create a new account.',
+            };
+          }
+          return { success: false, message: rawMsg };
         }
         if (data.user && data.session?.access_token) {
           await syncServerProfile(data.session.access_token, {
@@ -317,6 +344,36 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (err: any) {
       setLoading(false);
       return { success: false, message: err?.message || 'Authentication failed' };
+    }
+  };
+
+  const resetPassword = async (email: string) => {
+    const cleanEmail = email.trim().toLowerCase();
+    if (!cleanEmail) {
+      return { success: false, message: 'Please enter your registered email address.' };
+    }
+    try {
+      if (isSupabaseConfigured()) {
+        const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
+          redirectTo: `${window.location.origin}/login`,
+        });
+        if (error) {
+          return { success: false, message: error.message };
+        }
+        return {
+          success: true,
+          message: 'Password reset instructions have been sent to your email address.',
+        };
+      }
+      return {
+        success: true,
+        message: 'Password reset instructions have been sent to your email address.',
+      };
+    } catch (err: any) {
+      return {
+        success: false,
+        message: err?.message || 'Unable to send password reset instructions right now.',
+      };
     }
   };
 
@@ -443,7 +500,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             .maybeSingle();
 
           const isMasterEmail =
-            cleanEmail === 'admin@formandfit.in' || cleanEmail === 'owner@formandfit.in';
+            cleanEmail === 'admin@patanakart.in' ||
+            cleanEmail === 'owner@patanakart.in' ||
+            cleanEmail === 'admin@formandfit.in' ||
+            cleanEmail === 'owner@formandfit.in';
           const isApprovedRole =
             isMasterEmail ||
             (profileData && (profileData.role === 'owner' || profileData.role === 'admin'));
@@ -469,7 +529,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     } else if (
       !apiReached &&
-      (cleanEmail === 'admin@formandfit.in' || cleanEmail === 'owner@formandfit.in') &&
+      (cleanEmail === 'admin@patanakart.in' ||
+        cleanEmail === 'owner@patanakart.in' ||
+        cleanEmail === 'admin@formandfit.in' ||
+        cleanEmail === 'owner@formandfit.in') &&
       cleanPasscode === 'FormFit2026!Admin'
     ) {
       setAdminSessionCredentials(cleanEmail, cleanPasscode);
@@ -496,10 +559,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const setOwnerSession = () => {
-    setAdminSessionCredentials('admin@formandfit.in', 'FormFit2026!Admin');
+    setAdminSessionCredentials('admin@patanakart.in', 'FormFit2026!Admin');
     const ownerProfile: UserProfile = {
       id: 'owner_primary_account',
-      email: 'admin@formandfit.in',
+      email: 'admin@patanakart.in',
       full_name: 'Store Owner Admin',
       role: 'owner',
       created_at: new Date().toISOString(),
@@ -556,11 +619,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       value={{
         user,
         loading,
+        initializing,
         isOwner,
         isAdmin,
         login,
         signUp,
         signInWithPassword,
+        resetPassword,
         authenticateOwner,
         logout,
         updateProfile,

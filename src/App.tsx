@@ -1,6 +1,7 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { NotificationProvider } from './context/NotificationContext';
 import { StoreProvider } from './context/StoreContext';
 import { Navbar } from './components/Navbar';
 import { Footer } from './components/Footer';
@@ -28,47 +29,102 @@ import { OwnerOrders } from './pages/owner/OwnerOrders';
 import { OwnerCoupons } from './pages/owner/OwnerCoupons';
 import { OwnerSettings } from './pages/owner/OwnerSettings';
 
+import { BrandLogo } from './components/BrandLogo';
 import { AnimatedBackground } from './components/AnimatedBackground';
 import { MobileBottomNav } from './components/MobileBottomNav';
 import { AiFashionStylist } from './components/AiFashionStylist';
+import { NotificationCenter } from './components/NotificationCenter';
+
+const AuthLoadingScreen: React.FC = () => (
+  <div className="min-h-screen bg-[#FAF9F6] text-[#18181B] font-sans flex flex-col items-center justify-center gap-4 p-6">
+    <BrandLogo variant="badge" size="lg" />
+    <div className="flex items-center gap-2.5 text-xs font-medium text-[#52525B]">
+      <span className="w-4 h-4 rounded-full border-2 border-[#D6D5CE] border-t-[#65A30D] animate-spin" />
+      <span>Loading PatanaKart...</span>
+    </div>
+  </div>
+);
 
 const CustomerStylistHost: React.FC = () => {
   const location = useLocation();
-  if (location.pathname.startsWith('/owner')) {
+  const { user, isOwner, isAdmin, initializing } = useAuth();
+
+  if (
+    initializing ||
+    (!user && !isOwner && !isAdmin) ||
+    location.pathname.startsWith('/owner') ||
+    location.pathname === '/login' ||
+    location.pathname === '/register'
+  ) {
     return null;
   }
   return <AiFashionStylist />;
 };
 
+// Customer Entry Auth Guard
+const CustomerProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { user, isOwner, isAdmin, initializing } = useAuth();
+  const location = useLocation();
+
+  if (initializing) {
+    return <AuthLoadingScreen />;
+  }
+
+  if (!user && !isOwner && !isAdmin) {
+    return (
+      <Navigate
+        to="/login"
+        state={{ from: `${location.pathname}${location.search}` }}
+        replace
+      />
+    );
+  }
+
+  return <>{children}</>;
+};
+
 // Owner Guard
 const OwnerRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { isOwner, isAdmin } = useAuth();
+  const { isOwner, isAdmin, initializing } = useAuth();
+
+  if (initializing) {
+    return <AuthLoadingScreen />;
+  }
+
   if (!isAdmin && !isOwner) {
     return <Navigate to="/owner/login" replace />;
   }
   return <>{children}</>;
 };
 
-// Customer Layout wrapper in clean light theme
+// Protected Customer Layout wrapper in clean light theme
 const CustomerLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <div className="min-h-screen bg-[#FAF9F6] text-[#18181B] font-sans flex flex-col relative overflow-x-hidden selection:bg-[#B8F130] selection:text-[#111111] pb-16 md:pb-0">
-    <AnimatedBackground />
-    <div className="relative z-10 flex flex-col min-h-screen">
-      <Navbar />
-      <main className="flex-1">{children}</main>
-      <Footer />
+  <CustomerProtectedRoute>
+    <div className="min-h-screen bg-[#FAF9F6] text-[#18181B] font-sans flex flex-col relative overflow-x-hidden selection:bg-[#B8F130] selection:text-[#111111] pb-16 md:pb-0">
+      <AnimatedBackground />
+      <div className="relative z-10 flex flex-col min-h-screen">
+        <Navbar />
+        <main className="flex-1">{children}</main>
+        <Footer />
+      </div>
+      <MobileBottomNav />
+      <NotificationCenter />
     </div>
-    <MobileBottomNav />
-  </div>
+  </CustomerProtectedRoute>
 );
 
 export default function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <StoreProvider>
+        <NotificationProvider>
+          <StoreProvider>
           <Routes>
-            {/* Customer Routes */}
+            {/* Standalone Customer Sign In / Sign Up Entry Portal */}
+            <Route path="/login" element={<CustomerAuth />} />
+            <Route path="/register" element={<CustomerAuth />} />
+
+            {/* Protected Customer Storefront Routes */}
             <Route path="/" element={<CustomerLayout><Home /></CustomerLayout>} />
             <Route path="/shop" element={<CustomerLayout><Shop /></CustomerLayout>} />
             <Route path="/product/:slug" element={<CustomerLayout><ProductDetail /></CustomerLayout>} />
@@ -76,8 +132,6 @@ export default function App() {
             <Route path="/cart" element={<CustomerLayout><CartPage /></CustomerLayout>} />
             <Route path="/checkout" element={<CustomerLayout><Checkout /></CustomerLayout>} />
             <Route path="/wishlist" element={<CustomerLayout><WishlistPage /></CustomerLayout>} />
-            <Route path="/login" element={<CustomerLayout><CustomerAuth /></CustomerLayout>} />
-            <Route path="/register" element={<CustomerLayout><CustomerAuth /></CustomerLayout>} />
             <Route path="/account" element={<CustomerLayout><CustomerAccount /></CustomerLayout>} />
             <Route path="/account/orders/:id" element={<CustomerLayout><CustomerAccount /></CustomerLayout>} />
 
@@ -92,7 +146,7 @@ export default function App() {
                   <PolicyPage
                     title="Shipping & Delivery Policy"
                     subtitle="Express Logistics Across India"
-                    content="Form & Fit dispatches orders within 24-48 business hours. Deliveries across tier-1 cities typically take 2-4 business days. Regional and rural pin codes take 4-7 business days via surface couriers (Delhivery, BlueDart, XpressBees). Cash on Delivery is supported for eligible PIN codes."
+                    content="PatanaKart dispatches orders within 24-48 business hours. Deliveries across tier-1 cities typically take 2-4 business days. Regional and rural pin codes take 4-7 business days via surface couriers (Delhivery, BlueDart, XpressBees). Cash on Delivery is supported for eligible PIN codes."
                   />
                 </CustomerLayout>
               }
@@ -116,7 +170,7 @@ export default function App() {
                   <PolicyPage
                     title="Privacy Policy"
                     subtitle="Data Protection"
-                    content="Form & Fit values customer confidentiality. Your personal information, delivery address, and contact details are stored securely on Supabase cloud database with strict Row-Level Security policies. We never sell customer records to third parties."
+                    content="PatanaKart values customer confidentiality. Your personal information, delivery address, and contact details are stored securely on Supabase cloud database with strict Row-Level Security policies. We never sell customer records to third parties."
                   />
                 </CustomerLayout>
               }
@@ -128,7 +182,7 @@ export default function App() {
                   <PolicyPage
                     title="Terms & Conditions"
                     subtitle="Store Usage Rules"
-                    content="By browsing or purchasing from Form & Fit, you agree to our pricing terms, shipping conditions, and custom artwork usage rules. All monetary transactions are calculated in Indian Rupees (₹)."
+                    content="By browsing or purchasing from PatanaKart, you agree to our pricing terms, shipping conditions, and custom artwork usage rules. All monetary transactions are calculated in Indian Rupees (₹)."
                   />
                 </CustomerLayout>
               }
@@ -150,7 +204,8 @@ export default function App() {
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
           <CustomerStylistHost />
-        </StoreProvider>
+          </StoreProvider>
+        </NotificationProvider>
       </AuthProvider>
     </BrowserRouter>
   );

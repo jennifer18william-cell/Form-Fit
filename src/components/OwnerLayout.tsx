@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useStore } from '../context/StoreContext';
 import { SupabaseBanner } from './SupabaseBanner';
+import { BrandLogo } from './BrandLogo';
 import { motion } from 'motion/react';
 import {
   LayoutDashboard,
@@ -72,8 +73,7 @@ export const OwnerLayout: React.FC<{ children: React.ReactNode }> = ({ children 
                 to="/owner/dashboard"
                 className="flex items-center gap-2 font-space font-bold text-base sm:text-lg tracking-tight text-[#18181B] whitespace-nowrap shrink-0"
               >
-                <ShieldCheck size={20} className="text-[#4D7C0F]" />
-                <span>Form &amp; Fit Admin</span>
+                <BrandLogo size="sm" subtitle="ADMIN PORTAL" />
               </Link>
             </div>
 
@@ -177,7 +177,7 @@ export const OwnerLayout: React.FC<{ children: React.ReactNode }> = ({ children 
 
           <div className="bg-white border border-[#E5E4DF] rounded-xl p-4 space-y-2 text-xs font-sans">
             <p className="font-space font-semibold text-[#64748B]">Catalog Summary</p>
-            <p className="text-sm font-semibold text-[#18181B]">Form &amp; Fit Live Storefront</p>
+            <p className="text-sm font-semibold text-[#18181B]">PatanaKart Live Storefront</p>
             <p className="text-xs text-[#52525B] tabular-nums">
               {products.filter((p) => p.status === 'published').length} published products online
             </p>

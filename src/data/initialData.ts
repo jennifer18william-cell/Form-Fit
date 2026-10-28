@@ -17,14 +17,14 @@ export const DEFAULT_CATEGORIES: Category[] = [
 ];
 
 export const DEFAULT_STORE_SETTINGS: StoreSettings = {
-  store_name: 'Form & Fit',
-  logo_url: '',
+  store_name: 'PatanaKart',
+  logo_url: '/assets/patanakart-logo.jpg',
   announcement_text: '⚡ Free Shipping on All Orders Over ₹1,999 across India | Use Code: FORM10 for 10% Off',
   announcement_enabled: true,
-  hero_headline: 'FIND YOUR FIT. DEFINE YOUR FORM.',
+  hero_headline: 'FASHION FOR EVERY YOU.',
   hero_subtitle: 'Everyday essentials, statement pieces, and custom creations designed around your style.',
   hero_image_url: '',
-  contact_email: 'support@formandfit.in',
+  contact_email: 'support@patanakart.in',
   contact_phone: '+91 98765 43210',
   currency: 'INR',
   currency_symbol: '₹',
@@ -33,7 +33,7 @@ export const DEFAULT_STORE_SETTINGS: StoreSettings = {
   tax_percentage: 12,
   low_stock_threshold: 5,
   razorpay_enabled: true,
-  razorpay_key_id: 'rzp_test_FormAndFitKey',
+  razorpay_key_id: 'rzp_test_PatanaKartKey',
   cod_enabled: true,
 };
 

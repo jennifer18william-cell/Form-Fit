@@ -2,7 +2,9 @@ import React, { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useStore } from '../context/StoreContext';
 import { useAuth } from '../context/AuthContext';
+import { useNotifications } from '../context/NotificationContext';
 import { CartDrawer } from './CartDrawer';
+import { BrandLogo } from './BrandLogo';
 import {
   CANONICAL_DEFAULT_SLUGS,
   getCategoryCanonicalKey,
@@ -20,11 +22,13 @@ import {
   ChevronDown,
   LogOut,
   Truck,
+  Bell,
 } from 'lucide-react';
 
 export const Navbar: React.FC = () => {
   const { cart, wishlist, storeSettings, categories } = useStore();
   const { user, isAdmin, logout } = useAuth();
+  const { unreadCount, setIsDrawerOpen: setIsNotificationsOpen } = useNotifications();
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
@@ -130,18 +134,10 @@ export const Navbar: React.FC = () => {
 
             <Link
               to="/"
-              className="flex flex-col items-start whitespace-nowrap shrink-0 group"
+              className="flex items-center whitespace-nowrap shrink-0 group"
+              aria-label="PatanaKart Home"
             >
-              <span className="font-space font-extrabold text-xl sm:text-[26px] tracking-tight text-[#111111] leading-none uppercase">
-                FORM &amp; FIT
-              </span>
-              <span className="flex items-center gap-1.5 text-[8.5px] font-space font-bold uppercase tracking-[0.12em] text-[#57534E] mt-1">
-                <span className="w-2.5 h-[1px] bg-[#A8A29E]" aria-hidden="true" />
-                <span>
-                  FASHION &amp; <span className="text-[#7CB518]">CUSTOM STUDIO</span>
-                </span>
-                <span className="w-2.5 h-[1px] bg-[#A8A29E]" aria-hidden="true" />
-              </span>
+              <BrandLogo size="md" subtitle="FASHION FOR EVERY YOU" />
             </Link>
           </div>
 
@@ -332,6 +328,22 @@ export const Navbar: React.FC = () => {
               <Search size={19} strokeWidth={2} />
             </button>
 
+            {/* Notifications Bell Icon */}
+            <button
+              type="button"
+              onClick={() => setIsNotificationsOpen(true)}
+              className="p-2 text-[#111111] hover:bg-[#F3EFE8] rounded-md transition-colors relative cursor-pointer"
+              aria-label="Open notifications"
+              title="Notifications & Alerts"
+            >
+              <Bell size={19} strokeWidth={2} />
+              {unreadCount > 0 && (
+                <span className="absolute top-0.5 right-0.5 bg-[#B8F130] text-[#111111] text-[10px] font-mono font-bold w-4 h-4 rounded-full flex items-center justify-center pointer-events-none">
+                  {unreadCount > 9 ? '9+' : unreadCount}
+                </span>
+              )}
+            </button>
+
             {/* Wishlist Icon */}
             <Link
               to="/wishlist"
@@ -419,6 +431,19 @@ export const Navbar: React.FC = () => {
                     My Account &amp; Orders
                   </Link>
 
+                  <Link
+                    to="/account?tab=notifications"
+                    onClick={() => setIsUserMenuOpen(false)}
+                    className="flex items-center justify-between px-3.5 py-2.5 hover:bg-[#F3F2EE] text-[#18181B] font-medium transition-colors"
+                  >
+                    <span>Notifications &amp; SMS Alerts</span>
+                    {unreadCount > 0 && (
+                      <span className="font-mono font-bold text-[11px] text-[#3F6212]">
+                        {unreadCount} new
+                      </span>
+                    )}
+                  </Link>
+
                   {!user && (
                     <Link
                       to="/owner/login"
@@ -431,9 +456,10 @@ export const Navbar: React.FC = () => {
 
                   {user && (
                     <button
-                      onClick={() => {
-                        logout();
+                      onClick={async () => {
                         setIsUserMenuOpen(false);
+                        await logout();
+                        navigate('/login', { replace: true });
                       }}
                       className="w-full text-left flex items-center gap-2 px-3.5 py-2.5 text-red-600 hover:bg-red-50 font-medium border-t border-[#E5E4DF] mt-1 cursor-pointer"
                     >
@@ -573,7 +599,29 @@ export const Navbar: React.FC = () => {
             ))}
           </div>
 
-          <div className="pt-3 border-t border-[#E5E4DF]">
+          <div className="pt-3 border-t border-[#E5E4DF] space-y-2">
+            {user && (
+              <div className="grid grid-cols-2 gap-2">
+                <Link
+                  to="/account"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className="py-2.5 px-3 bg-[#FAF9F6] text-[#111111] border border-[#E5E4DF] font-semibold text-center text-xs flex items-center justify-center gap-1.5 rounded-md hover:border-[#9ED912] transition-colors"
+                >
+                  <User size={14} /> My Account
+                </Link>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setIsMobileMenuOpen(false);
+                    await logout();
+                    navigate('/login', { replace: true });
+                  }}
+                  className="py-2.5 px-3 bg-red-50 text-red-700 border border-red-200 font-semibold text-center text-xs flex items-center justify-center gap-1.5 rounded-md hover:bg-red-100 transition-colors cursor-pointer uppercase"
+                >
+                  <LogOut size={14} /> Sign Out
+                </button>
+              </div>
+            )}
             <Link
               to="/owner/dashboard"
               onClick={() => setIsMobileMenuOpen(false)}

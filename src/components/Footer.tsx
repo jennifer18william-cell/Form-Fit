@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useStore } from '../context/StoreContext';
+import { BrandLogo } from './BrandLogo';
 import { Instagram, Twitter, Facebook, ArrowRight, Check } from 'lucide-react';
 
 export const Footer: React.FC = () => {
@@ -22,16 +23,11 @@ export const Footer: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-10 pb-12 border-b border-[#E5E4DF]">
           {/* Brand Col */}
           <div className="lg:col-span-2 space-y-4">
-            <Link to="/" className="inline-block">
-              <span className="font-space font-bold text-2xl tracking-tight text-[#18181B]">
-                Form &amp; Fit
-              </span>
-              <span className="block text-xs text-[#64748B] mt-0.5">
-                Modern Apparel &amp; Custom Studio
-              </span>
+            <Link to="/" className="inline-block" aria-label="PatanaKart Home">
+              <BrandLogo size="md" subtitle="FASHION FOR EVERY YOU" />
             </Link>
             <p className="text-xs text-[#52525B] leading-relaxed max-w-sm">
-              Form &amp; Fit pairs 240 GSM combed cottons with contemporary tailoring. Designed for everyday comfort, enduring structure, and personal expression.
+              PatanaKart pairs 240 GSM combed cottons with contemporary tailoring. Designed for everyday comfort, enduring structure, and personal expression.
             </p>
 
             <div className="pt-2 flex items-center space-x-4 text-[#52525B]">
@@ -161,7 +157,7 @@ export const Footer: React.FC = () => {
 
             {subscribed ? (
               <div className="bg-[#F4FBE1] border border-[#BEF264] text-[#3F6212] p-3 rounded-md text-xs font-medium flex items-center gap-2">
-                <Check size={16} className="shrink-0" /> Subscribed to Form &amp; Fit drops!
+                <Check size={16} className="shrink-0" /> Subscribed to PatanaKart drops!
               </div>
             ) : (
               <form onSubmit={handleSubscribe} className="space-y-2">
@@ -189,7 +185,7 @@ export const Footer: React.FC = () => {
 
         {/* Bottom Bar */}
         <div className="pt-8 flex flex-col sm:flex-row items-center justify-between text-xs text-[#64748B] space-y-4 sm:space-y-0">
-          <p>© {new Date().getFullYear()} Form &amp; Fit. All rights reserved. Prices in INR (₹).</p>
+          <p>© {new Date().getFullYear()} PatanaKart. All rights reserved. Prices in INR (₹).</p>
           <div className="flex items-center space-x-6">
             <Link to="/about" className="hover:text-[#18181B] transition-colors">
               About Brand
